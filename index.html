@@ -1,0 +1,2429 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
+    <title>Deteksi Kualitas Tempe · Sandik Bayu Asmoro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <style>
+      :root {
+        --primary: #10b981;
+        --primary-dark: #059669;
+        --primary-glow: rgba(16, 185, 129, 0.35);
+        --secondary: #0f172a;
+        --card-bg: rgba(255, 255, 255, 0.06);
+        --card-bg-hover: rgba(255, 255, 255, 0.09);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        --text: #f8fafc;
+        --text-soft: #94a3b8;
+        --text-muted: #64748b;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --radius: 20px;
+        --radius-sm: 12px;
+        --color-bg-secondary: rgba(255, 255, 255, 0.04);
+        --color-border: rgba(255, 255, 255, 0.08);
+      }
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family: "Inter", sans-serif;
+        background: radial-gradient(
+            ellipse 80% 60% at 0% 0%,
+            #0d3d33 0%,
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse 60% 50% at 100% 100%,
+            #0f172a 0%,
+            transparent 50%
+          ),
+          linear-gradient(160deg, #020b16, #0a1a2e, #020617);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 16px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .app {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .header {
+        text-align: center;
+        padding: 24px 16px 32px;
+      }
+      .header h1 {
+        font-size: clamp(24px, 5vw, 42px);
+        font-weight: 800;
+        line-height: 1.15;
+        background: linear-gradient(135deg, #10b981, #34d399, #6ee7b7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 10px;
+      }
+      .header p {
+        color: var(--text-soft);
+        font-size: clamp(12px, 2.5vw, 14px);
+        line-height: 1.6;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 24px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--glass-border);
+        border-radius: 18px;
+        padding: 6px;
+      }
+      .tab {
+        flex: 1;
+        border: none;
+        padding: 12px 8px;
+        border-radius: 13px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: clamp(11px, 2.5vw, 14px);
+        color: var(--text-soft);
+        background: transparent;
+        transition: all 0.25s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .tab i {
+        font-size: clamp(14px, 3vw, 16px);
+      }
+      .tab span {
+        display: none;
+      }
+      @media (min-width: 480px) {
+        .tab span {
+          display: inline;
+        }
+      }
+      .tab:hover {
+        background: rgba(255, 255, 255, 0.07);
+        color: var(--text);
+      }
+      .tab.active {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: #fff;
+        box-shadow: 0 6px 20px var(--primary-glow);
+      }
+      .section {
+        display: none;
+      }
+      .section.active {
+        display: block;
+      }
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--glass-border);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border-radius: var(--radius);
+        padding: clamp(16px, 4vw, 28px);
+        margin-bottom: 20px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+      }
+      @media (hover: hover) {
+        .card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4),
+            0 0 16px rgba(16, 185, 129, 0.1);
+        }
+      }
+      .card-title {
+        font-size: clamp(15px, 3vw, 18px);
+        font-weight: 700;
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text);
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+      @media (min-width: 768px) {
+        .two-col {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .drop-zone {
+        border: 2px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 18px;
+        padding: clamp(32px, 8vw, 56px) 20px;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.02);
+        cursor: pointer;
+        transition: all 0.25s ease;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .drop-zone:hover,
+      .drop-zone.dragover {
+        border-color: var(--primary);
+        background: rgba(16, 185, 129, 0.07);
+        transform: scale(1.01);
+      }
+      .drop-zone .icon {
+        font-size: clamp(40px, 10vw, 60px);
+        color: var(--primary);
+        margin-bottom: 12px;
+      }
+      .drop-zone p {
+        color: var(--text-soft);
+        font-size: 14px;
+      }
+      .drop-zone p.small {
+        font-size: 11px;
+        margin-top: 4px;
+        color: var(--text-muted);
+      }
+      .camera-section {
+        margin-top: 20px;
+        border-top: 1px solid var(--color-border);
+        padding-top: 20px;
+      }
+      .camera-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-soft);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .camera-wrapper {
+        position: relative;
+        width: 100%;
+        max-width: 480px;
+        margin: 0 auto;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #000;
+        aspect-ratio: 4/3;
+        border: 2px solid var(--primary);
+        box-shadow: 0 0 24px rgba(16, 185, 129, 0.25);
+        display: none;
+      }
+      .camera-wrapper.active {
+        display: block;
+      }
+      .camera-wrapper video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .camera-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 14px;
+        box-shadow: inset 0 0 0 2px rgba(16, 185, 129, 0.3);
+      }
+      .camera-overlay::before,
+      .camera-overlay::after {
+        content: "";
+        position: absolute;
+        width: 28px;
+        height: 28px;
+        border-color: var(--primary);
+        border-style: solid;
+        border-width: 0;
+      }
+      .camera-overlay::before {
+        top: 12px;
+        left: 12px;
+        border-top-width: 3px;
+        border-left-width: 3px;
+        border-radius: 4px 0 0 0;
+      }
+      .camera-overlay::after {
+        bottom: 12px;
+        right: 12px;
+        border-bottom-width: 3px;
+        border-right-width: 3px;
+        border-radius: 0 0 4px 0;
+      }
+      .camera-status {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.6);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--primary);
+        backdrop-filter: blur(6px);
+      }
+      .camera-status .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--primary);
+        animation: pulse-dot 1.2s infinite;
+      }
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.4;
+          transform: scale(0.7);
+        }
+      }
+      .camera-no-support {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 8px;
+        padding: 32px;
+        color: var(--text-muted);
+        font-size: 13px;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px dashed var(--color-border);
+        border-radius: 16px;
+      }
+      .camera-no-support i {
+        font-size: 32px;
+        color: var(--text-muted);
+      }
+      .camera-btn-row {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .camera-permission-notice {
+        display: none;
+        margin-top: 10px;
+        padding: 10px 14px;
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.25);
+        border-radius: 12px;
+        font-size: 12px;
+        color: #fcd34d;
+        text-align: center;
+      }
+      .btn {
+        border: none;
+        padding: 13px 22px;
+        border-radius: 14px;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 14px;
+        transition: all 0.25s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      .btn.primary {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: #fff;
+        box-shadow: 0 8px 20px var(--primary-glow);
+      }
+      .btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 28px rgba(16, 185, 129, 0.4);
+      }
+      .btn.primary:active {
+        transform: scale(0.97);
+      }
+      .btn.secondary {
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid var(--glass-border);
+        color: var(--text);
+      }
+      .btn.secondary:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .btn.danger {
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #fca5a5;
+      }
+      .btn.danger:hover {
+        background: rgba(239, 68, 68, 0.25);
+      }
+      .btn.sm {
+        padding: 9px 16px;
+        font-size: 12px;
+        border-radius: 10px;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none !important;
+      }
+      .sim-btn-row {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 16px;
+        flex-wrap: wrap;
+      }
+      .sample-btn {
+        padding: 10px 20px;
+        border-radius: 12px;
+        border: 1px solid var(--glass-border);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .sample-btn.baik {
+        background: rgba(16, 185, 129, 0.12);
+        color: #6ee7b7;
+        border-color: rgba(16, 185, 129, 0.3);
+      }
+      .sample-btn.sedang {
+        background: rgba(245, 158, 11, 0.12);
+        color: #fcd34d;
+        border-color: rgba(245, 158, 11, 0.3);
+      }
+      .sample-btn.buruk {
+        background: rgba(239, 68, 68, 0.12);
+        color: #fca5a5;
+        border-color: rgba(239, 68, 68, 0.3);
+      }
+      .sample-btn:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.15);
+      }
+      .preview-layout {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+      @media (min-width: 600px) {
+        .preview-layout {
+          grid-template-columns: auto 1fr;
+        }
+      }
+      .preview-canvas-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      #previewCanvas {
+        border-radius: 14px;
+        max-width: 100%;
+        width: clamp(140px, 40vw, 200px);
+        height: clamp(140px, 40vw, 200px);
+        display: block;
+      }
+      .progress-step {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: clamp(11px, 2.5vw, 13px);
+        color: var(--text-soft);
+        padding: 3px 0;
+      }
+      .step-dot {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 9px;
+        color: #fff;
+      }
+      .step-line {
+        width: 2px;
+        height: 10px;
+        background: rgba(16, 185, 129, 0.3);
+        margin-left: 9px;
+      }
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      @media (min-width: 600px) {
+        .metrics-grid {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+      .metric {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--color-border);
+        border-radius: 16px;
+        padding: clamp(14px, 3vw, 22px);
+        text-align: center;
+        transition: 0.25s;
+      }
+      .metric:hover {
+        background: rgba(255, 255, 255, 0.08);
+        transform: translateY(-3px);
+      }
+      .metric-label {
+        color: var(--text-soft);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 8px;
+      }
+      .metric-value {
+        font-size: clamp(22px, 5vw, 34px);
+        font-weight: 800;
+      }
+      .metric-value.good {
+        color: var(--primary);
+      }
+      .result-badge {
+        display: inline-block;
+        padding: 12px 28px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: clamp(14px, 3.5vw, 18px);
+        margin-top: 8px;
+      }
+      .badge-baik {
+        background: rgba(16, 185, 129, 0.15);
+        color: #6ee7b7;
+        border: 1px solid rgba(16, 185, 129, 0.4);
+      }
+      .badge-sedang {
+        background: rgba(245, 158, 11, 0.15);
+        color: #fcd34d;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+      }
+      .badge-buruk {
+        background: rgba(239, 68, 68, 0.15);
+        color: #fca5a5;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      }
+      .feature-bar-track {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        overflow: hidden;
+        height: 10px;
+      }
+      .feature-bar-fill {
+        border-radius: 999px;
+        height: 10px;
+        background: linear-gradient(90deg, #10b981, #34d399);
+      }
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--color-border);
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .info-row:last-child {
+        border-bottom: none;
+      }
+      .info-row-label {
+        color: var(--text-soft);
+        font-size: 13px;
+      }
+      .info-row-val {
+        font-weight: 700;
+        font-size: 13px;
+        text-align: right;
+      }
+      .chart-wrap {
+        position: relative;
+        height: 220px;
+      }
+      @media (min-width: 600px) {
+        .chart-wrap {
+          height: 260px;
+        }
+      }
+      canvas {
+        border-radius: 12px;
+      }
+      .conf-matrix {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: clamp(10px, 2.5vw, 13px);
+      }
+      .conf-matrix th,
+      .conf-matrix td {
+        padding: clamp(6px, 2vw, 10px);
+        border: 1px solid var(--color-border);
+        text-align: center;
+      }
+      .conf-matrix th {
+        color: var(--text-soft);
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .conf-high {
+        background: rgba(16, 185, 129, 0.18);
+        color: #6ee7b7;
+        font-weight: 700;
+      }
+      .conf-mid {
+        background: rgba(245, 158, 11, 0.12);
+        color: #fcd34d;
+      }
+      .conf-low {
+        background: rgba(239, 68, 68, 0.08);
+        color: #fca5a5;
+      }
+      .conf-matrix-wrap {
+        overflow-x: auto;
+      }
+      .tree-viz {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        padding: 16px 0;
+      }
+      .tree-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 4px;
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.1);
+      }
+      .workflow-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+      }
+      .workflow-box {
+        width: clamp(64px, 15vw, 80px);
+        height: clamp(48px, 10vw, 56px);
+        border: 1px solid var(--color-border);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: clamp(9px, 2vw, 11px);
+        color: var(--text-soft);
+        background: var(--color-bg-secondary);
+        text-align: center;
+        padding: 4px;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .workflow-box i {
+        font-size: clamp(14px, 3vw, 18px);
+        margin-bottom: 2px;
+      }
+      .workflow-arrow {
+        color: var(--text-muted);
+        font-size: 14px;
+        padding: 0 2px;
+      }
+      .tag {
+        font-size: 11px;
+        padding: 3px 8px;
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        color: var(--text-soft);
+        display: inline-block;
+      }
+      #csv-download-bar {
+        text-align: center;
+        margin-top: 12px;
+        margin-bottom: 20px;
+      }
+      .legend-row {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        color: var(--text-soft);
+      }
+      .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        display: inline-block;
+      }
+      /* ── API Status Banner ── */
+      #api-status-bar {
+        padding: 8px 14px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 18px;
+        transition: all 0.3s;
+      }
+      #api-status-bar.checking {
+        background: rgba(100, 116, 139, 0.12);
+        border: 1px solid rgba(100, 116, 139, 0.25);
+        color: #94a3b8;
+      }
+      #api-status-bar.online {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        color: #6ee7b7;
+      }
+      #api-status-bar.offline {
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        color: #fcd34d;
+      }
+      .api-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .api-dot.green {
+        background: #10b981;
+        box-shadow: 0 0 6px #10b981;
+      }
+      .api-dot.yellow {
+        background: #f59e0b;
+      }
+      .api-dot.gray {
+        background: #64748b;
+      }
+      /* ── Loading spinner ── */
+      .spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-top-color: #10b981;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      /* ── DT comparison panel ── */
+      .dt-panel {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--color-border);
+        border-radius: 14px;
+        padding: 14px;
+        margin-top: 16px;
+      }
+      .dt-panel-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-soft);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .proba-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .proba-chip {
+        flex: 1;
+        min-width: 80px;
+        text-align: center;
+        padding: 8px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .proba-chip.baik {
+        background: rgba(16, 185, 129, 0.12);
+        color: #6ee7b7;
+      }
+      .proba-chip.sedang {
+        background: rgba(245, 158, 11, 0.12);
+        color: #fcd34d;
+      }
+      .proba-chip.buruk {
+        background: rgba(239, 68, 68, 0.12);
+        color: #fca5a5;
+      }
+      @media (max-width: 479px) {
+        .header {
+          padding: 16px 8px 24px;
+        }
+        .card {
+          padding: 16px;
+        }
+        .drop-zone {
+          padding: 28px 14px;
+        }
+        .metrics-grid {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        }
+        .metric {
+          padding: 14px 10px;
+        }
+        .metric-value {
+          font-size: 22px;
+        }
+      }
+      @media (min-width: 768px) {
+        body {
+          padding: 24px;
+        }
+        .metrics-grid {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h2
+      class="sr-only"
+      style="position: absolute; width: 1px; height: 1px; overflow: hidden"
+    >
+      Aplikasi deteksi kualitas tempe berbasis citra tekstur dan warna
+      menggunakan algoritma Random Forest
+    </h2>
+    <div class="app">
+      <!-- HEADER -->
+      <div class="header">
+        <h1>
+          <i class="ti ti-microscope" aria-hidden="true"></i> Deteksi Kualitas
+          Tempe
+        </h1>
+        <p>
+          Berbasis citra tekstur &amp; warna &nbsp;·&nbsp; Algoritma Random
+          Forest &nbsp;·&nbsp; Sandik Bayu Asmoro (221101057)
+        </p>
+      </div>
+
+      <!-- API STATUS -->
+      <div id="api-status-bar" class="checking">
+        <div class="api-dot gray" id="apiDot"></div>
+        <span id="apiStatusText">Memeriksa koneksi ke server model ML...</span>
+        <span
+          id="apiServerUrl"
+          style="margin-left: auto; opacity: 0.6; font-size: 11px"
+        ></span>
+      </div>
+
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('deteksi')">
+          <i class="ti ti-upload"></i><span>Deteksi</span>
+        </button>
+        <button class="tab" onclick="switchTab('hasil')">
+          <i class="ti ti-chart-bar"></i><span>Hasil &amp; Evaluasi</span>
+        </button>
+        <button class="tab" onclick="switchTab('model')">
+          <i class="ti ti-brain"></i><span>Info Model</span>
+        </button>
+      </div>
+
+      <!-- ═══════════════════ TAB 1: DETEKSI ═══════════════════ -->
+      <div class="section active" id="tab-deteksi">
+        <div class="card">
+          <div class="card-title">
+            <i class="ti ti-photo"></i> Unggah atau Ambil Foto Tempe
+          </div>
+          <div
+            class="drop-zone"
+            id="dropZone"
+            onclick="document.getElementById('fileInput').click()"
+            ondragover="event.preventDefault();this.classList.add('dragover')"
+            ondragleave="this.classList.remove('dragover')"
+            ondrop="handleDrop(event)"
+          >
+            <div class="icon"><i class="ti ti-photo-up"></i></div>
+            <p>Klik atau seret gambar tempe ke sini</p>
+            <p class="small">
+              Format JPG / PNG &nbsp;·&nbsp; Resolusi min. 128×128 px
+            </p>
+          </div>
+          <input
+            type="file"
+            id="fileInput"
+            accept="image/*"
+            capture="environment"
+            style="display: none"
+            onchange="handleFile(event)"
+          />
+
+          <!-- KAMERA -->
+          <div class="camera-section">
+            <div class="camera-label">
+              <i class="ti ti-camera"></i> Kamera Langsung
+            </div>
+            <div class="camera-wrapper" id="cameraWrapper">
+              <video id="camera" autoplay playsinline muted></video>
+              <div class="camera-overlay"></div>
+              <div class="camera-status"><span class="dot"></span> LIVE</div>
+            </div>
+            <div
+              id="cameraNoSupport"
+              class="camera-no-support"
+              style="display: none"
+            >
+              <i class="ti ti-camera-off"></i
+              ><span>Kamera tidak tersedia.</span>
+            </div>
+            <div id="cameraPermNotice" class="camera-permission-notice">
+              Izin kamera ditolak. Silakan izinkan akses kamera di pengaturan
+              browser Anda.
+            </div>
+            <div class="camera-btn-row">
+              <button
+                class="btn secondary sm"
+                id="btnToggleCam"
+                onclick="toggleCamera()"
+              >
+                <i class="ti ti-camera" id="camBtnIcon"></i
+                ><span id="camBtnText">Aktifkan Kamera</span>
+              </button>
+              <button
+                class="btn primary sm"
+                id="btnCapture"
+                onclick="captureCamera()"
+                disabled
+              >
+                <i class="ti ti-camera-selfie"></i> Ambil Foto
+              </button>
+              <button
+                class="btn secondary sm"
+                id="btnFlip"
+                onclick="flipCamera()"
+                style="display: none"
+              >
+                <i class="ti ti-refresh"></i> Balik
+              </button>
+            </div>
+          </div>
+
+          <!-- SAMPLE -->
+          <div class="sim-btn-row">
+            <button class="sample-btn baik" onclick="loadSample('baik')">
+              <i class="ti ti-check"></i> Sampel Baik
+            </button>
+            <button class="sample-btn sedang" onclick="loadSample('sedang')">
+              <i class="ti ti-minus"></i> Sampel Sedang
+            </button>
+            <button class="sample-btn buruk" onclick="loadSample('buruk')">
+              <i class="ti ti-x"></i> Sampel Buruk
+            </button>
+          </div>
+        </div>
+
+        <!-- PREVIEW CARD -->
+        <div class="card" id="preview-card" style="display: none">
+          <div class="card-title">
+            <i class="ti ti-eye"></i> Pratinjau &amp; Analisis
+          </div>
+          <div class="preview-layout">
+            <div class="preview-canvas-wrap">
+              <canvas id="previewCanvas" width="200" height="200"></canvas>
+              <div
+                style="
+                  font-size: 11px;
+                  color: var(--text-soft);
+                  text-align: center;
+                "
+                id="img-info"
+              >
+                128×128 px · RGB
+              </div>
+            </div>
+            <div>
+              <div
+                style="
+                  font-size: 12px;
+                  color: var(--text-soft);
+                  margin-bottom: 10px;
+                "
+              >
+                Tahapan preprocessing:
+              </div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span>Resize → 128×128 px (interpolasi bilinear)</span>
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span>Konversi BGR → RGB, HSV, &amp; Grayscale</span>
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span>Gaussian Blur (3×3) · Normalisasi</span>
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span
+                  >Ekstraksi fitur warna RGB/HSV + histogram (60 fitur)</span
+                >
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span>Ekstraksi tekstur GLCM 4 sudut (20 fitur)</span>
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span>Ekstraksi LBP radius=3 (26 fitur)</span>
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span>Klasifikasi Random Forest (200 pohon, 106 fitur)</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top: 20px; text-align: center">
+            <button
+              class="btn primary"
+              id="btnRunAnalysis"
+              onclick="runAnalysis()"
+            >
+              <i class="ti ti-player-play"></i> Jalankan Deteksi
+            </button>
+          </div>
+        </div>
+
+        <!-- RESULT CARD -->
+        <div class="card" id="result-card" style="display: none">
+          <div class="card-title">
+            <i class="ti ti-certificate"></i> Hasil Klasifikasi
+          </div>
+          <div style="text-align: center; margin-bottom: 20px">
+            <div
+              style="
+                font-size: 13px;
+                color: var(--text-soft);
+                margin-bottom: 6px;
+              "
+            >
+              Kualitas tempe terdeteksi:
+            </div>
+            <div id="result-badge" class="result-badge">—</div>
+            <div
+              style="font-size: 11px; color: var(--text-muted); margin-top: 8px"
+              id="result-model-note"
+            >
+              Probabilitas majority voting · model pkl asli
+            </div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric">
+              <div class="metric-label">Confidence</div>
+              <div class="metric-value good" id="conf-val">—</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Waktu proses</div>
+              <div class="metric-value" id="time-val">—</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Total fitur</div>
+              <div class="metric-value" id="feat-count-val">106</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Pohon voting</div>
+              <div class="metric-value" id="tree-count-val">200</div>
+            </div>
+          </div>
+
+          <!-- Probabilitas tiga kelas -->
+          <div style="margin-bottom: 16px">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px">
+              Distribusi probabilitas kelas:
+            </div>
+            <div class="proba-row" id="proba-row">
+              <div class="proba-chip baik" id="proba-baik">Baik: —</div>
+              <div class="proba-chip sedang" id="proba-sedang">Sedang: —</div>
+              <div class="proba-chip buruk" id="proba-buruk">Buruk: —</div>
+            </div>
+          </div>
+
+          <!-- Feature bars -->
+          <div style="margin-bottom: 10px">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px">
+              Top feature importance terdeteksi:
+            </div>
+            <div id="feature-bars"></div>
+          </div>
+
+          <!-- DT comparison -->
+          <div class="dt-panel" id="dt-panel" style="display: none">
+            <div class="dt-panel-title">
+              <i class="ti ti-git-branch"></i> Perbandingan: Decision Tree
+            </div>
+            <div
+              id="dt-result-text"
+              style="
+                font-size: 12px;
+                color: var(--text-soft);
+                margin-bottom: 8px;
+              "
+            >
+              —
+            </div>
+            <div class="proba-row" id="dt-proba-row"></div>
+          </div>
+
+          <div
+            style="
+              padding: 12px;
+              background: var(--color-bg-secondary);
+              border-radius: 12px;
+              border: 1px solid var(--color-border);
+              margin-top: 14px;
+            "
+          >
+            <div
+              style="font-size: 13px; color: var(--text-soft)"
+              id="result-desc"
+            >
+              —
+            </div>
+          </div>
+        </div>
+
+        <!-- CSV DOWNLOAD -->
+        <div id="csv-download-bar" style="display: none">
+          <button class="btn primary" onclick="downloadCSV()">
+            <i class="ti ti-download"></i> Unduh Hasil (CSV)
+          </button>
+        </div>
+      </div>
+      <!-- /tab-deteksi -->
+
+      <!-- ═══════════════════ TAB 2: HASIL & EVALUASI ═══════════════════ -->
+      <div class="section" id="tab-hasil">
+        <!-- Ringkasan hasil terakhir -->
+        <div
+          id="hasil-klasifikasi-anchor"
+          class="card"
+          style="
+            display: none;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            background: rgba(16, 185, 129, 0.06);
+            margin-bottom: 20px;
+          "
+        >
+          <div class="card-title" style="color: #34d399">
+            <i class="ti ti-certificate"></i> Hasil Klasifikasi Terakhir
+          </div>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 16px;
+              flex-wrap: wrap;
+            "
+          >
+            <div style="text-align: center; flex: 1; min-width: 120px">
+              <div
+                style="
+                  font-size: 11px;
+                  color: var(--text-soft);
+                  margin-bottom: 6px;
+                "
+              >
+                Kualitas terdeteksi
+              </div>
+              <div
+                id="hasil-tab-badge"
+                class="result-badge"
+                style="font-size: 14px; padding: 8px 20px"
+              >
+                —
+              </div>
+            </div>
+            <div style="flex: 2; min-width: 160px">
+              <div
+                style="
+                  font-size: 12px;
+                  color: var(--text-soft);
+                  margin-bottom: 8px;
+                "
+                id="hasil-tab-desc"
+              >
+                —
+              </div>
+              <div style="display: flex; gap: 16px; flex-wrap: wrap">
+                <div style="text-align: center">
+                  <div style="font-size: 11px; color: var(--text-soft)">
+                    Confidence
+                  </div>
+                  <div
+                    style="
+                      font-size: 20px;
+                      font-weight: 800;
+                      color: var(--primary);
+                    "
+                    id="hasil-tab-conf"
+                  >
+                    —
+                  </div>
+                </div>
+                <div style="text-align: center">
+                  <div style="font-size: 11px; color: var(--text-soft)">
+                    Total Fitur
+                  </div>
+                  <div
+                    style="font-size: 20px; font-weight: 800"
+                    id="hasil-tab-feat"
+                  >
+                    106
+                  </div>
+                </div>
+                <div style="text-align: center">
+                  <div style="font-size: 11px; color: var(--text-soft)">
+                    Pohon
+                  </div>
+                  <div
+                    style="font-size: 20px; font-weight: 800"
+                    id="hasil-tab-trees"
+                  >
+                    200
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <button
+                class="btn primary sm"
+                onclick="switchTab('deteksi');setTimeout(()=>{document.getElementById('result-card').scrollIntoView({behavior:'smooth',block:'start'})},150)"
+              >
+                <i class="ti ti-arrow-left"></i> Lihat detail
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric">
+            <div class="metric-label">Akurasi RF</div>
+            <div class="metric-value good">91.67%</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Akurasi DT</div>
+            <div class="metric-value good">79.17%</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">DATASET</div>
+            <div class="metric-value good">120</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">FITUR</div>
+            <div class="metric-value good">106</div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-title">
+              <i class="ti ti-table"></i> Confusion Matrix
+            </div>
+            <div class="conf-matrix-wrap">
+              <table class="conf-matrix">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Pred: Baik</th>
+                    <th>Pred: Sedang</th>
+                    <th>Pred: Buruk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th>Aktual: Baik</th>
+                    <td class="conf-high">38</td>
+                    <td class="conf-low">1</td>
+                    <td class="conf-low">1</td>
+                  </tr>
+                  <tr>
+                    <th>Aktual: Sedang</th>
+                    <td class="conf-low">2</td>
+                    <td class="conf-high">36</td>
+                    <td class="conf-low">2</td>
+                  </tr>
+                  <tr>
+                    <th>Aktual: Buruk</th>
+                    <td class="conf-low">1</td>
+                    <td class="conf-mid">2</td>
+                    <td class="conf-high">37</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div
+              style="font-size: 11px; color: var(--text-muted); margin-top: 8px"
+            >
+              Data testing: 120 sampel (20% dari 600 total)
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <i class="ti ti-chart-bar"></i> Metrik per Kelas
+            </div>
+            <div class="chart-wrap">
+              <canvas
+                id="metricsChart"
+                aria-label="Bar chart metrik per kelas"
+              ></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <i class="ti ti-trending-up"></i> Feature Importance (Top 10) — dari
+            model pkl
+          </div>
+          <div class="chart-wrap" style="height: 250px">
+            <canvas
+              id="importanceChart"
+              aria-label="Bar chart feature importance"
+            ></canvas>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-title"><i class="ti ti-database"></i> Dataset</div>
+            <div class="info-row">
+              <span class="info-row-label">Total citra</span
+              ><span class="info-row-val">120</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Tempe baik</span
+              ><span class="info-row-val">40 (40%)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Tempe sedang</span
+              ><span class="info-row-val">40 (40%)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Tempe buruk</span
+              ><span class="info-row-val">40 (40%)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Split training</span
+              ><span class="info-row-val">96 (80%)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Split testing</span
+              ><span class="info-row-val">24 (20%)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Resolusi asli</span
+              ><span class="info-row-val">1920×1080 px</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Resolusi setelah resize</span
+              ><span class="info-row-val">128×128 px</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <i class="ti ti-clock"></i> Efisiensi Sistem
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Waktu proses/citra</span
+              ><span class="info-row-val">0,87 detik</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Responden usability</span
+              ><span class="info-row-val">10 orang</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Perbandingan YOLOv8</span
+              ><span class="info-row-val">mAP 94,7%</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Akurasi RF (penelitian ini)</span
+              ><span class="info-row-val">91.67%%</span>
+            </div>
+            <div
+              style="
+                margin-top: 12px;
+                padding: 10px;
+                background: var(--color-bg-secondary);
+                border-radius: 10px;
+                font-size: 12px;
+                color: var(--text-soft);
+              "
+            >
+              RF lebih efisien secara komputasi dibanding deep learning untuk
+              lingkungan keterbatasan sumber daya.
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /tab-hasil -->
+
+      <!-- ═══════════════════ TAB 3: INFO MODEL ═══════════════════ -->
+      <div class="section" id="tab-model">
+        <div class="two-col">
+          <div class="card">
+            <div class="card-title">
+              <i class="ti ti-adjustments"></i> Parameter Random Forest
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">n_estimators</span
+              ><span class="info-row-val" id="info-trees">200 pohon</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">max_depth</span
+              ><span class="info-row-val">10</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">max_features</span
+              ><span class="info-row-val">sqrt(n_features)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">random_state</span
+              ><span class="info-row-val">42</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">criterion</span
+              ><span class="info-row-val">Gini Index</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Total fitur</span
+              ><span class="info-row-val" id="info-feats">106</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">File model</span
+              ><span class="info-row-val">random_forest_tempe_model.pkl</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Decision Tree</span
+              ><span class="info-row-val">decision_tree_tempe_model.pkl</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <i class="ti ti-list"></i> Fitur Ekstraksi (106 total)
+            </div>
+            <div
+              style="
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-soft);
+                margin-bottom: 4px;
+              "
+            >
+              Fitur warna (60):
+            </div>
+            <div
+              style="
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-bottom: 14px;
+              "
+            >
+              Mean &amp; std R,G,B (6) + Mean &amp; std H,S,V (6) + Histogram
+              RGB 16-bin (48)
+            </div>
+            <div
+              style="
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-soft);
+                margin-bottom: 4px;
+              "
+            >
+              Fitur tekstur GLCM (20):
+            </div>
+            <div
+              style="
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-bottom: 8px;
+              "
+            >
+              5 parameter × 4 sudut (0°, 45°, 90°, 135°) · distances=[1]:
+            </div>
+            <div
+              style="
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-bottom: 14px;
+              "
+            >
+              <span class="tag">Kontras</span><span class="tag">Korelasi</span
+              ><span class="tag">Energi</span
+              ><span class="tag">Homogenitas</span
+              ><span class="tag">Dissimilarity</span>
+            </div>
+            <div
+              style="
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-soft);
+                margin-bottom: 4px;
+              "
+            >
+              Fitur tekstur LBP (26):
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted)">
+              Local Binary Pattern uniform · radius=3 · n_points=24 · 26-bin
+              histogram
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="tree-card">
+          <div class="card-title">
+            <i class="ti ti-sitemap"></i> Visualisasi Voting
+            <span id="tree-viz-title">200</span> Decision Tree
+          </div>
+          <div
+            style="
+              font-size: 12px;
+              color: var(--text-muted);
+              margin-bottom: 10px;
+            "
+          >
+            Setiap kotak = 1 decision tree. Hijau = voting "Baik", kuning =
+            "Sedang", merah = "Buruk"
+          </div>
+          <div class="tree-viz" id="treeDots"></div>
+          <div
+            style="margin-top: 10px; font-size: 12px; color: var(--text-muted)"
+          >
+            Hasil klasifikasi ditentukan oleh
+            <strong>majority voting</strong> dari seluruh pohon keputusan.
+          </div>
+          <div class="legend-row">
+            <div class="legend-item">
+              <span class="legend-dot" style="background: #1d9e75"></span> Baik
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: #ef9f27"></span>
+              Sedang
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: #e24b4a"></span> Buruk
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <i class="ti ti-layers"></i> Alur Kerja Sistem
+          </div>
+          <div class="workflow-wrap">
+            <div class="workflow-box">
+              <i class="ti ti-camera"></i>Input Citra
+            </div>
+            <i class="ti ti-arrow-right workflow-arrow"></i>
+            <div class="workflow-box">
+              <i class="ti ti-adjustments"></i>Preprocess
+            </div>
+            <i class="ti ti-arrow-right workflow-arrow"></i>
+            <div class="workflow-box">
+              <i class="ti ti-vector"></i>106 Fitur
+            </div>
+            <i class="ti ti-arrow-right workflow-arrow"></i>
+            <div class="workflow-box"><i class="ti ti-brain"></i>RF + DT</div>
+            <i class="ti ti-arrow-right workflow-arrow"></i>
+            <div class="workflow-box">
+              <i class="ti ti-certificate"></i>Output Kelas
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /tab-model -->
+    </div>
+    <!-- /app -->
+
+    <script>
+      // ═══════════════════════════════════════════════════
+      // CONFIG — Ganti URL jika server berjalan di port lain
+      // ═══════════════════════════════════════════════════
+      const API_BASE = "http://localhost:5000";
+
+      // ─── State ────────────────────────────────────────
+      let chartMetrics = null,
+        chartImportance = null;
+      let latestResult = null;
+      const detectionHistory = [];
+      let cameraStream = null,
+        currentFacingMode = "environment",
+        cameraActive = false;
+      let currentImage = null;
+      let apiOnline = false;
+
+      // ─── Real top-10 from model (fallback if API offline) ─
+      const REAL_TOP10 = [
+        { name: "mean_S", importance: 4.45 },
+        { name: "std_S", importance: 3.7 },
+        { name: "hist_R_6", importance: 2.77 },
+        { name: "hist_G_8", importance: 2.43 },
+        { name: "hist_G_15", importance: 2.43 },
+        { name: "hist_G_9", importance: 2.29 },
+        { name: "hist_B_7", importance: 2.26 },
+        { name: "hist_G_5", importance: 2.19 },
+        { name: "hist_R_9", importance: 2.08 },
+        { name: "hist_B_8", importance: 2.03 },
+      ];
+
+      // ─── API Health Check ─────────────────────────────
+      async function checkAPI() {
+        const bar = document.getElementById("api-status-bar");
+        const dot = document.getElementById("apiDot");
+        const text = document.getElementById("apiStatusText");
+        const url = document.getElementById("apiServerUrl");
+        url.textContent = API_BASE;
+        try {
+          const r = await fetch(`${API_BASE}/health`, {
+            signal: AbortSignal.timeout(3000),
+          });
+          const d = await r.json();
+          if (d.status === "ok") {
+            apiOnline = true;
+            bar.className = "online";
+            dot.className = "api-dot green";
+            text.textContent = `✅ Server ML online · RF=${
+              d.rf_loaded ? "✓" : "✗"
+            } · DT=${d.dt_loaded ? "✓" : "✗"}`;
+            // Fetch real model info
+            const mi = await fetch(`${API_BASE}/model-info`);
+            const md = await mi.json();
+            if (md.random_forest) {
+              document.getElementById("info-trees").textContent =
+                md.random_forest.n_estimators + " pohon";
+              document.getElementById("info-feats").textContent =
+                md.random_forest.n_features;
+              document.getElementById("tree-count-val").textContent =
+                md.random_forest.n_estimators;
+              document.getElementById("feat-count-val").textContent =
+                md.random_forest.n_features;
+              document.getElementById("tree-viz-title").textContent =
+                md.random_forest.n_estimators;
+              document.getElementById("hasil-tab-trees").textContent =
+                md.random_forest.n_estimators;
+              document.getElementById("hasil-tab-feat").textContent =
+                md.random_forest.n_features;
+            }
+            return;
+          }
+        } catch (e) {}
+        apiOnline = false;
+        bar.className = "offline";
+        dot.className = "api-dot yellow";
+        text.textContent =
+          "⚠️ Server ML offline — jalankan: python3 server.py &nbsp;|&nbsp; Mode fallback (estimasi lokal) aktif";
+      }
+
+      // ─── Charts ───────────────────────────────────────
+      function renderCharts() {
+        const ctx1 = document.getElementById("metricsChart");
+        if (ctx1) {
+          if (chartMetrics) chartMetrics.destroy();
+          chartMetrics = new Chart(ctx1, {
+            type: "bar",
+            data: {
+              labels: ["Tempe Baik", "Tempe Sedang", "Tempe Buruk"],
+              datasets: [
+                {
+                  label: "Precision",
+                  data: [94, 88, 92],
+                  backgroundColor: "#10b981",
+                },
+                {
+                  label: "Recall",
+                  data: [96, 86, 90],
+                  backgroundColor: "#3b82f6",
+                },
+                {
+                  label: "F1 Score",
+                  data: [95, 87, 91],
+                  backgroundColor: "#f59e0b",
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+              },
+              scales: {
+                y: {
+                  min: 0,
+                  max: 100,
+                  ticks: { color: "#94a3b8" },
+                  grid: { color: "rgba(255,255,255,.06)" },
+                },
+                x: { ticks: { color: "#94a3b8" }, grid: { display: false } },
+              },
+            },
+          });
+        }
+        const ctx2 = document.getElementById("importanceChart");
+        if (ctx2) {
+          if (chartImportance) chartImportance.destroy();
+          chartImportance = new Chart(ctx2, {
+            type: "bar",
+            data: {
+              labels: REAL_TOP10.map((f) => f.name),
+              datasets: [
+                {
+                  label: "Importance (%)",
+                  data: REAL_TOP10.map((f) => f.importance),
+                  backgroundColor: [
+                    "#10b981",
+                    "#34d399",
+                    "#f59e0b",
+                    "#3b82f6",
+                    "#ef4444",
+                    "#8b5cf6",
+                    "#06b6d4",
+                    "#84cc16",
+                    "#f97316",
+                    "#ec4899",
+                  ],
+                },
+              ],
+            },
+            options: {
+              indexAxis: "y",
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+              },
+              scales: {
+                x: {
+                  ticks: { color: "#94a3b8" },
+                  grid: { color: "rgba(255,255,255,.06)" },
+                },
+                y: {
+                  ticks: { color: "#94a3b8", font: { size: 10 } },
+                  grid: { display: false },
+                },
+              },
+            },
+          });
+        }
+      }
+
+      // ─── Tab Switching ────────────────────────────────
+      function switchTab(id) {
+        const names = ["deteksi", "hasil", "model"];
+        document
+          .querySelectorAll(".tab")
+          .forEach((t, i) => t.classList.toggle("active", names[i] === id));
+        document
+          .querySelectorAll(".section")
+          .forEach((s) => s.classList.toggle("active", s.id === "tab-" + id));
+        if (id === "hasil") {
+          setTimeout(() => {
+            const a = document.getElementById("hasil-klasifikasi-anchor");
+            const t =
+              a && a.style.display !== "none"
+                ? a
+                : document.getElementById("tab-hasil");
+            t && t.scrollIntoView({ behavior: "smooth", block: "start" });
+            renderCharts();
+          }, 50);
+        }
+        if (id === "model")
+          setTimeout(
+            () =>
+              document
+                .getElementById("tree-card")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            50
+          );
+      }
+
+      // ─── File handling ────────────────────────────────
+      function handleDrop(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove("dragover");
+        const f = e.dataTransfer.files[0];
+        if (f && f.type.startsWith("image/")) processFile(f);
+      }
+      function handleFile(e) {
+        const f = e.target.files[0];
+        if (f) processFile(f);
+      }
+
+      function processFile(file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = function () {
+            currentImage = { element: img, isFile: true, file };
+            drawToCanvas(img);
+            document.getElementById("img-info").innerHTML =
+              img.width + " × " + img.height + " px · Analisis ML aktif";
+            showPreviewCard();
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function drawToCanvas(img) {
+        const c = document.getElementById("previewCanvas");
+        const ctx = c.getContext("2d");
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+      }
+
+      function showPreviewCard() {
+        document.getElementById("preview-card").style.display = "block";
+        document.getElementById("result-card").style.display = "none";
+        document.getElementById("csv-download-bar").style.display = "none";
+        setTimeout(
+          () =>
+            document
+              .getElementById("preview-card")
+              .scrollIntoView({ behavior: "smooth", block: "start" }),
+          100
+        );
+      }
+
+      // ─── Sample buttons ───────────────────────────────
+      function loadSample(type) {
+        const c = document.getElementById("previewCanvas");
+        const ctx = c.getContext("2d");
+        ctx.clearRect(0, 0, c.width, c.height);
+        if (type === "baik") {
+          ctx.fillStyle = "#e8e0d0";
+          ctx.fillRect(0, 0, 200, 200);
+          for (let i = 0; i < 800; i++) {
+            const x = Math.random() * 200,
+              y = Math.random() * 200;
+            ctx.fillStyle = `rgba(240,238,232,${Math.random() * 0.6 + 0.4})`;
+            ctx.beginPath();
+            ctx.arc(x, y, Math.random() * 3 + 1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          for (let i = 0; i < 40; i++) {
+            const x = Math.random() * 200,
+              y = Math.random() * 200;
+            ctx.fillStyle = "rgba(200,195,185,.5)";
+            ctx.beginPath();
+            ctx.arc(x, y, Math.random() * 6 + 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (type === "sedang") {
+          ctx.fillStyle = "#c8b878";
+          ctx.fillRect(0, 0, 200, 200);
+          for (let i = 0; i < 500; i++) {
+            const x = Math.random() * 200,
+              y = Math.random() * 200;
+            ctx.fillStyle = `rgba(${180 + Math.random() * 40},${
+              150 + Math.random() * 40
+            },${80 + Math.random() * 30},.6)`;
+            ctx.beginPath();
+            ctx.arc(x, y, Math.random() * 4 + 1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else {
+          ctx.fillStyle = "#3a2a18";
+          ctx.fillRect(0, 0, 200, 200);
+          for (let i = 0; i < 600; i++) {
+            const x = Math.random() * 200,
+              y = Math.random() * 200;
+            ctx.fillStyle = `rgba(${20 + Math.random() * 40},${
+              15 + Math.random() * 30
+            },${5 + Math.random() * 15},.8)`;
+            ctx.beginPath();
+            ctx.arc(x, y, Math.random() * 5 + 1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        currentImage = { isSample: true, sampleType: type };
+        document.getElementById("img-info").innerHTML =
+          "200×200 px · Sampel " + type.charAt(0).toUpperCase() + type.slice(1);
+        showPreviewCard();
+      }
+
+      // ─── Camera ───────────────────────────────────────
+      async function toggleCamera() {
+        cameraActive ? stopCamera() : await startCamera();
+      }
+      async function startCamera() {
+        const wrapper = document.getElementById("cameraWrapper"),
+          noSup = document.getElementById("cameraNoSupport"),
+          notice = document.getElementById("cameraPermNotice");
+        const btnT = document.getElementById("btnToggleCam"),
+          btnC = document.getElementById("btnCapture"),
+          btnF = document.getElementById("btnFlip");
+        const camIcon = document.getElementById("camBtnIcon"),
+          camText = document.getElementById("camBtnText"),
+          video = document.getElementById("camera");
+        notice.style.display = "none";
+        noSup.style.display = "none";
+        if (!navigator.mediaDevices?.getUserMedia) {
+          noSup.style.display = "flex";
+          return;
+        }
+        try {
+          if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: currentFacingMode,
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          });
+          cameraStream = stream;
+          video.srcObject = stream;
+          await video.play();
+          cameraActive = true;
+          wrapper.classList.add("active");
+          btnC.disabled = false;
+          btnT.className = "btn danger sm";
+          camIcon.className = "ti ti-camera-off";
+          camText.textContent = "Matikan Kamera";
+          const devs = await navigator.mediaDevices.enumerateDevices();
+          btnF.style.display =
+            devs.filter((d) => d.kind === "videoinput").length > 1
+              ? "inline-flex"
+              : "none";
+        } catch (err) {
+          if (
+            err.name === "NotAllowedError" ||
+            err.name === "PermissionDeniedError"
+          ) {
+            notice.style.display = "block";
+          } else if (err.name === "NotFoundError") {
+            noSup.style.display = "flex";
+          } else {
+            try {
+              const s = await navigator.mediaDevices.getUserMedia({
+                video: true,
+              });
+              cameraStream = s;
+              video.srcObject = s;
+              await video.play();
+              cameraActive = true;
+              wrapper.classList.add("active");
+              btnC.disabled = false;
+              btnT.className = "btn danger sm";
+              camIcon.className = "ti ti-camera-off";
+              camText.textContent = "Matikan Kamera";
+            } catch {
+              noSup.style.display = "flex";
+            }
+          }
+        }
+      }
+      function stopCamera() {
+        const wrapper = document.getElementById("cameraWrapper"),
+          btnT = document.getElementById("btnToggleCam"),
+          btnC = document.getElementById("btnCapture"),
+          btnF = document.getElementById("btnFlip"),
+          camIcon = document.getElementById("camBtnIcon"),
+          camText = document.getElementById("camBtnText"),
+          video = document.getElementById("camera");
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((t) => t.stop());
+          cameraStream = null;
+        }
+        video.srcObject = null;
+        cameraActive = false;
+        wrapper.classList.remove("active");
+        btnC.disabled = true;
+        btnF.style.display = "none";
+        btnT.className = "btn secondary sm";
+        camIcon.className = "ti ti-camera";
+        camText.textContent = "Aktifkan Kamera";
+      }
+      async function flipCamera() {
+        currentFacingMode =
+          currentFacingMode === "environment" ? "user" : "environment";
+        await startCamera();
+      }
+      function captureCamera() {
+        const video = document.getElementById("camera");
+        if (!video.srcObject) {
+          alert("Aktifkan kamera terlebih dahulu.");
+          return;
+        }
+        const c = document.getElementById("previewCanvas"),
+          ctx = c.getContext("2d");
+        ctx.drawImage(video, 0, 0, c.width, c.height);
+        currentImage = { isCamera: true };
+        document.getElementById("img-info").innerHTML =
+          "Kamera Live · " + video.videoWidth + "×" + video.videoHeight + " px";
+        showPreviewCard();
+      }
+
+      // ─── Analysis: try API, fallback to local ─────────
+      async function runAnalysis() {
+        if (!currentImage) {
+          alert("Upload atau ambil gambar terlebih dahulu.");
+          return;
+        }
+
+        const btn = document.getElementById("btnRunAnalysis");
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Menganalisis...';
+
+        const t0 = performance.now();
+
+        if (apiOnline) {
+          try {
+            await runAnalysisAPI();
+            btn.disabled = false;
+            btn.innerHTML =
+              '<i class="ti ti-player-play"></i> Jalankan Deteksi';
+            return;
+          } catch (e) {
+            console.warn("API call failed, using fallback:", e);
+          }
+        }
+        // Fallback
+        runAnalysisFallback(t0);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-player-play"></i> Jalankan Deteksi';
+      }
+
+      async function runAnalysisAPI() {
+        const canvas = document.getElementById("previewCanvas");
+        const b64 = canvas.toDataURL("image/png");
+        const resp = await fetch(`${API_BASE}/predict`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_base64: b64 }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!resp.ok) throw new Error("API error " + resp.status);
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        // Show result
+        const badgeMap = {
+          baik: "badge-baik",
+          sedang: "badge-sedang",
+          buruk: "badge-buruk",
+        };
+        document.getElementById("result-badge").innerHTML = data.label_display;
+        document.getElementById("result-badge").className =
+          "result-badge " + badgeMap[data.label_key];
+        document.getElementById("conf-val").innerHTML = data.confidence + "%";
+        document.getElementById("time-val").innerHTML = data.elapsed_ms + " ms";
+        document.getElementById("result-desc").innerHTML = data.description;
+        document.getElementById(
+          "result-model-note"
+        ).innerHTML = `Probabilitas majority voting · ${data.n_estimators} pohon · model pkl asli`;
+
+        // Probabilities
+        document.getElementById("proba-baik").textContent =
+          "Baik: " + data.probabilities.baik + "%";
+        document.getElementById("proba-sedang").textContent =
+          "Sedang: " + data.probabilities.sedang + "%";
+        document.getElementById("proba-buruk").textContent =
+          "Buruk: " + data.probabilities.buruk + "%";
+
+        // Feature bars (top 10 from model)
+        renderFeatureBars(
+          data.top10_features
+            .slice(0, 5)
+            .map((f) => ({ name: f.name, value: f.importance }))
+        );
+
+        // DT comparison
+        if (data.decision_tree && data.decision_tree.label_key) {
+          const dt = data.decision_tree;
+          const dtPanel = document.getElementById("dt-panel");
+          dtPanel.style.display = "block";
+          const agree = dt.label_key === data.label_key;
+          document.getElementById(
+            "dt-result-text"
+          ).innerHTML = `Decision Tree prediksi: <strong>${dt.label_key.toUpperCase()}</strong> · ${
+            agree ? "✅ Setuju dengan RF" : "⚠️ Berbeda dari RF"
+          }`;
+          if (dt.probabilities) {
+            const row = document.getElementById("dt-proba-row");
+            row.innerHTML = `<div class="proba-chip baik">Baik: ${dt.probabilities.baik}%</div><div class="proba-chip sedang">Sedang: ${dt.probabilities.sedang}%</div><div class="proba-chip buruk">Buruk: ${dt.probabilities.buruk}%</div>`;
+          }
+        }
+
+        // Update tree voting viz
+        renderVoting(
+          data.probabilities.baik,
+          data.probabilities.sedang,
+          data.probabilities.buruk,
+          data.n_estimators
+        );
+
+        latestResult = data;
+        showResultCard(
+          data.label_display,
+          badgeMap[data.label_key],
+          data.confidence + "%",
+          data.description,
+          data.confidence
+        );
+
+        // Save for CSV
+        detectionHistory.push({
+          kualitas_tempe: data.label_display,
+          confidence: data.confidence + "%",
+          waktu_proses: data.elapsed_ms + "ms",
+          proba_baik: data.probabilities.baik + "%",
+          proba_sedang: data.probabilities.sedang + "%",
+          proba_buruk: data.probabilities.buruk + "%",
+          deskripsi: data.description,
+        });
+      }
+
+      // ─── Fallback (local pixel analysis) ─────────────
+      function rgbToHsv(r, g, b) {
+        r /= 255;
+        g /= 255;
+        b /= 255;
+        const max = Math.max(r, g, b),
+          min = Math.min(r, g, b);
+        let h,
+          s,
+          v = max;
+        const d = max - min;
+        s = max === 0 ? 0 : d / max;
+        if (max === min) {
+          h = 0;
+        } else {
+          switch (max) {
+            case r:
+              h = (g - b) / d + (g < b ? 6 : 0);
+              break;
+            case g:
+              h = (b - r) / d + 2;
+              break;
+            case b:
+              h = (r - g) / d + 4;
+              break;
+          }
+          h /= 6;
+        }
+        return [h * 360, s * 100, v * 100];
+      }
+      function runAnalysisFallback(t0) {
+        const canvas = document.getElementById("previewCanvas"),
+          ctx = canvas.getContext("2d");
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let tR = 0,
+          tG = 0,
+          tB = 0,
+          tH = 0,
+          tS = 0,
+          tV = 0;
+        const gray = [];
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i],
+            g = data[i + 1],
+            b = data[i + 2];
+          tR += r;
+          tG += g;
+          tB += b;
+          const h = rgbToHsv(r, g, b);
+          tH += h[0];
+          tS += h[1];
+          tV += h[2];
+          gray.push(0.299 * r + 0.587 * g + 0.114 * b);
+        }
+        const n = gray.length,
+          mR = tR / n,
+          mG = tG / n,
+          mB = tB / n,
+          mV = tV / n,
+          mS = tS / n;
+        const meanGray = gray.reduce((a, b) => a + b, 0) / n;
+        let energy = 0,
+          homog = 0,
+          contrast = 0;
+        gray.forEach((g) => {
+          contrast += Math.pow(g - meanGray, 2);
+          energy += g * g;
+          homog += 1 / (1 + Math.abs(g - meanGray));
+        });
+        contrast /= n;
+        energy /= n * 255 * 255;
+        homog /= n;
+        const dark = gray.filter((v) => v < 60).length / n,
+          white = gray.filter((v) => v > 180).length / n;
+        let bB = 0,
+          bS = 0,
+          bBr = 0;
+        if (mV > 70) bB += 30;
+        else if (mV > 45) bS += 25;
+        else bBr += 30;
+        if (mS < 30) bB += 20;
+        else if (mS < 60) bS += 20;
+        else bBr += 20;
+        if (white > 0.35) bB += 25;
+        if (dark > 0.3) bBr += 30;
+        if (dark > 0.1 && dark < 0.3) bS += 20;
+        if (energy > 0.05) bB += 10;
+        else bS += 10;
+        if (homog > 0.12) bB += 15;
+        else bBr += 15;
+        if (contrast > 2500) bBr += 20;
+        const max = Math.max(bB, bS, bBr);
+        let key, badge, desc;
+        if (max === bB) {
+          key = "baik";
+          badge = "badge-baik";
+          desc =
+            "Tempe berwarna putih cerah dengan pertumbuhan jamur merata, tekstur padat, dan aroma khas tempe segar yang baik.";
+        } else if (max === bS) {
+          key = "sedang";
+          badge = "badge-sedang";
+          desc =
+            "Tempe mengalami perubahan warna dan tekstur. Kualitas mulai menurun.";
+        } else {
+          key = "buruk";
+          badge = "badge-buruk";
+          desc =
+            "Tempe gelap dengan indikasi pembusukan, tekstur rusak. Tidak disarankan dikonsumsi.";
+        }
+        const labels = {
+          baik: "Tempe Berkualitas Baik",
+          sedang: "Tempe Berkualitas Sedang",
+          buruk: "Tempe Berkualitas Buruk",
+        };
+        const total = bB + bS + bBr;
+        const conf = Math.round((max / total) * 100);
+        const elapsed = Math.round(performance.now() - t0);
+
+        document.getElementById("result-badge").innerHTML = labels[key];
+        document.getElementById("result-badge").className =
+          "result-badge " + badge;
+        document.getElementById("conf-val").innerHTML = conf + "%";
+        document.getElementById("time-val").innerHTML = elapsed + " ms";
+        document.getElementById("result-desc").innerHTML = desc;
+        document.getElementById("result-model-note").innerHTML =
+          "⚠️ Mode fallback lokal (server offline) · bukan model pkl";
+        document.getElementById("proba-baik").textContent =
+          "Baik: " + Math.round((bB / total) * 100) + "%";
+        document.getElementById("proba-sedang").textContent =
+          "Sedang: " + Math.round((bS / total) * 100) + "%";
+        document.getElementById("proba-buruk").textContent =
+          "Buruk: " + Math.round((bBr / total) * 100) + "%";
+        document.getElementById("dt-panel").style.display = "none";
+        renderFeatureBars([
+          { name: "Brightness (V)", value: Math.round(mV) },
+          { name: "White Area", value: Math.round(white * 100) },
+          { name: "Contrast", value: Math.round(contrast / 50) },
+          { name: "Homogeneity", value: Math.round(homog * 100) },
+          { name: "Dark Area", value: Math.round(dark * 100) },
+        ]);
+        renderVoting(
+          Math.round((bB / total) * 100),
+          Math.round((bS / total) * 100),
+          Math.round((bBr / total) * 100),
+          200
+        );
+        latestResult = {
+          label_display: labels[key],
+          label_key: key,
+          confidence: conf,
+          description: desc,
+          elapsed_ms: elapsed,
+          n_estimators: 200,
+          probabilities: {
+            baik: Math.round((bB / total) * 100),
+            sedang: Math.round((bS / total) * 100),
+            buruk: Math.round((bBr / total) * 100),
+          },
+        };
+        detectionHistory.push({
+          kualitas_tempe: labels[key],
+          confidence: conf + "%",
+          waktu_proses: elapsed + "ms",
+          proba_baik: Math.round((bB / total) * 100) + "%",
+          proba_sedang: Math.round((bS / total) * 100) + "%",
+          proba_buruk: Math.round((bBr / total) * 100) + "%",
+          deskripsi: desc,
+        });
+        showResultCard(labels[key], badge, conf + "%", desc, conf);
+      }
+
+      function showResultCard(label, badge, conf, desc, confNum) {
+        document.getElementById("result-card").style.display = "block";
+        document.getElementById("csv-download-bar").style.display = "block";
+        // Sync to tab hasil
+        const anchor = document.getElementById("hasil-klasifikasi-anchor");
+        anchor.style.display = "block";
+        document.getElementById("hasil-tab-badge").innerHTML = label;
+        document.getElementById("hasil-tab-badge").className =
+          "result-badge " + badge;
+        document.getElementById("hasil-tab-desc").innerHTML = desc;
+        document.getElementById("hasil-tab-conf").innerHTML = conf;
+        setTimeout(
+          () =>
+            document
+              .getElementById("result-card")
+              .scrollIntoView({ behavior: "smooth", block: "start" }),
+          100
+        );
+      }
+
+      function renderFeatureBars(features) {
+        const bars = document.getElementById("feature-bars");
+        bars.innerHTML = "";
+        features.forEach((f) => {
+          bars.innerHTML += `<div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px;color:var(--text-soft)">
+            <span>${f.name}</span><span>${
+            typeof f.value === "number" ? Math.round(f.value) : f.value
+          }%</span>
+          </div>
+          <div class="feature-bar-track"><div class="feature-bar-fill" style="width:${Math.min(
+            f.value,
+            100
+          )}%"></div></div>
+        </div>`;
+        });
+      }
+
+      function renderVoting(pBaik, pSedang, pBuruk, n = 200) {
+        const el = document.getElementById("treeDots");
+        if (!el) return;
+        el.innerHTML = "";
+        const bN = Math.round((n * pBaik) / 100),
+          sN = Math.round((n * pSedang) / 100),
+          brN = n - bN - sN;
+        const arr = [];
+        for (let i = 0; i < bN; i++) arr.push("#10b981");
+        for (let i = 0; i < sN; i++) arr.push("#f59e0b");
+        for (let i = 0; i < Math.max(0, brN); i++) arr.push("#ef4444");
+        arr.sort(() => Math.random() - 0.5);
+        arr.forEach((c) => {
+          const d = document.createElement("div");
+          d.className = "tree-dot";
+          d.style.background = c;
+          el.appendChild(d);
+        });
+      }
+
+      // ─── CSV ──────────────────────────────────────────
+      function downloadCSV() {
+        if (!latestResult) {
+          alert("Belum ada hasil. Jalankan deteksi dulu.");
+          return;
+        }
+        const headers = [
+          "Kualitas Tempe",
+          "Confidence",
+          "Waktu Proses",
+          "Proba Baik",
+          "Proba Sedang",
+          "Proba Buruk",
+          "Deskripsi",
+        ];
+        const rows = detectionHistory.map((r) => [
+          r.kualitas_tempe,
+          r.confidence,
+          r.waktu_proses,
+          r.proba_baik,
+          r.proba_sedang,
+          r.proba_buruk,
+          '"' + r.deskripsi.replace(/"/g, '""') + '"',
+        ]);
+        const csv =
+          "\uFEFF" +
+          [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(
+          new Blob([csv], { type: "text/csv;charset=utf-8;" })
+        );
+        a.download =
+          "hasil_deteksi_tempe_" +
+          new Date().toISOString().slice(0, 10) +
+          ".csv";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+
+      // ─── Init ─────────────────────────────────────────
+      document.addEventListener("DOMContentLoaded", () => {
+        checkAPI().then(renderCharts);
+        // Re-check every 30s
+        setInterval(() => checkAPI(), 30000);
+      });
+    </script>
+  </body>
+</html>
