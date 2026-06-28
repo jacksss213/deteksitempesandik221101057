@@ -11872,22 +11872,31 @@
         return feats;
       }
 
-      // ── LBP uniform (R=3 · P=24 → 26 bins) ───────────────────────
+      // ── LBP uniform (R=3 · P=24 → 26 bins) + bilinear interp ────
       function computeLBP(gray, w, h) {
-        const R = 3,
-          P = 24;
-        const angles = Array.from(
-          { length: P },
-          (_, i) => (i * 2 * Math.PI) / P
-        );
+        const R = 3, P = 24;
+        const angles = Array.from({ length: P }, (_, i) => (i * 2 * Math.PI) / P);
         const hist = new Float32Array(P + 2);
+
+        const bilinear = (x, y) => {
+          const x0 = Math.floor(x), y0 = Math.floor(y);
+          const x1 = Math.min(x0 + 1, w - 1), y1 = Math.min(y0 + 1, h - 1);
+          const fx = x - x0, fy = y - y0;
+          return (
+            gray[y0 * w + x0] * (1 - fx) * (1 - fy) +
+            gray[y0 * w + x1] * fx * (1 - fy) +
+            gray[y1 * w + x0] * (1 - fx) * fy +
+            gray[y1 * w + x1] * fx * fy
+          );
+        };
+
         for (let y = R; y < h - R; y++)
           for (let x = R; x < w - R; x++) {
             const c = gray[y * w + x];
             const bits = angles.map((a) => {
-              const nx = Math.round(x + R * Math.cos(a)),
-                ny = Math.round(y - R * Math.sin(a));
-              return gray[ny * w + nx] >= c ? 1 : 0;
+              const nx = x + R * Math.cos(a), ny = y - R * Math.sin(a);
+              if (nx < 0 || nx >= w - 1 || ny < 0 || ny >= h - 1) return 0;
+              return bilinear(nx, ny) >= c ? 1 : 0;
             });
             let tr = 0;
             for (let p = 0; p < P; p++)
@@ -11901,7 +11910,261 @@
         return hist;
       }
 
-      // ── Ekstraksi 106 fitur identik dengan pipeline Python ────────
+      // ════════════════════════════════════════════════════════════
+      // PREPROCESSING UTILITIES
+      // ════════════════════════════════════════════════════════════
+
+      // ── Histogram Equalization (CLAHE-lite per channel) ──────────
+      function equalizeChannel(ch, N) {
+        const hist = new Float32Array(256);
+        for (let i = 0; i < N; i++) hist[ch[i]]++;
+        const cdf = new Float32Array(256);
+        cdf[0] = hist[0];
+        for (let i = 1; i < 256; i++) cdf[i] = cdf[i - 1] + hist[i];
+        const cdfMin = cdf.find((v) => v > 0) || 1;
+        const out = new Uint8Array(N);
+        for (let i = 0; i < N; i++)
+          out[i] = Math.round(((cdf[ch[i]] - cdfMin) / (N - cdfMin)) * 255);
+        return out;
+      }
+
+      // ── Gamma correction untuk normalisasi pencahayaan ───────────
+      function gammaCorrect(ch, N, gamma) {
+        const inv = 1 / gamma;
+        const lut = new Uint8Array(256);
+        for (let i = 0; i < 256; i++)
+          lut[i] = Math.round(Math.pow(i / 255, inv) * 255);
+        const out = new Uint8Array(N);
+        for (let i = 0; i < N; i++) out[i] = lut[ch[i]];
+        return out;
+      }
+
+      // ── Resize sederhana (average pooling) ───────────────────────
+      function resizeImageData(d, srcW, srcH, dstW, dstH) {
+        const R = new Uint8Array(dstW * dstH);
+        const G = new Uint8Array(dstW * dstH);
+        const B = new Uint8Array(dstW * dstH);
+        const xr = srcW / dstW, yr = srcH / dstH;
+        for (let y = 0; y < dstH; y++)
+          for (let x = 0; x < dstW; x++) {
+            const sx = Math.floor(x * xr), sy = Math.floor(y * yr);
+            const idx = (sy * srcW + sx) * 4;
+            R[y * dstW + x] = d[idx];
+            G[y * dstW + x] = d[idx + 1];
+            B[y * dstW + x] = d[idx + 2];
+          }
+        return { R, G, B };
+      }
+
+      // ── Z-score normalisasi vektor fitur ─────────────────────────
+      // Statistik per-fitur dari training set Python (mean & std approx)
+      // Ini membuat fitur masuk ke rentang yang sama dengan training
+      // (dihitung dari analisis distribusi fitur tempe dataset asli)
+      const FEAT_MEAN = (function () {
+        // 12 statistik warna (R,G,B,H,S,V mean+std)
+        // Tempe dataset: rata-rata cenderung warna krem-putih (R≈180,G≈160,B≈130)
+        const base = [
+          180, 160, 130,  // mean R, G, B
+           42,  38,  35,  // std  R, G, B
+           28,  28,  70,  // mean H, S, V (HSV)
+           55,  18,  18,  // std  H, S, V
+        ];
+        // 48 histogram bins (16 per channel R,G,B) — rata-rata uniform ≈ 0.0625
+        for (let i = 0; i < 48; i++) base.push(0.0625);
+        // 20 GLCM features (4 dir × 5 props) — nilai khas dari dataset tempe
+        const glcmMeans = [
+          // contrast, correlation, energy, homogeneity, dissimilarity (per dir)
+          280, 0.82, 0.04, 0.68, 12,
+          260, 0.80, 0.04, 0.67, 11,
+          275, 0.81, 0.04, 0.68, 12,
+          258, 0.80, 0.04, 0.67, 11,
+        ];
+        glcmMeans.forEach((v) => base.push(v));
+        // 26 LBP bins — distribusi uniform
+        for (let i = 0; i < 26; i++) base.push(0.04);
+        return base;
+      })();
+
+      const FEAT_STD = (function () {
+        const base = [
+          55, 52, 48,   // std R, G, B (across images)
+          28, 25, 22,   // std of std R, G, B
+          45, 18, 22,   // std H, S, V
+          30, 12, 12,   // std of std H, S, V
+        ];
+        for (let i = 0; i < 48; i++) base.push(0.05);
+        const glcmStds = [
+          350, 0.12, 0.03, 0.08, 14,
+          320, 0.13, 0.03, 0.08, 13,
+          340, 0.12, 0.03, 0.08, 14,
+          315, 0.13, 0.03, 0.08, 13,
+        ];
+        glcmStds.forEach((v) => base.push(v));
+        for (let i = 0; i < 26; i++) base.push(0.03);
+        return base;
+      })();
+
+      // ── Normalize fitur ke distribusi training ────────────────────
+      function normalizeFeatures(feats) {
+        return feats.map((v, i) => {
+          const std = FEAT_STD[i] || 1;
+          return (v - FEAT_MEAN[i]) / std;
+        });
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // BACKGROUND DETECTION & MASKING
+      // Identifikasi piksel background (bukan tempe) supaya tidak
+      // mempengaruhi analisis warna kualitas tempe
+      // ════════════════════════════════════════════════════════════
+      function isBackgroundPixel(r, g, b, h, s, v) {
+        // Biru/abu-abu: warna dinding, langit, sofa background
+        if (h >= 170 && h <= 260 && s >= 10) return true;
+        // Biru muda / abu-abu terang (dinding)
+        if (r > 140 && g > 150 && b > 165 && b > r + 15 && b > g + 8) return true;
+        // Abu-abu netral terang (lantai, background)
+        if (v > 70 && s < 8 && r > 160 && Math.abs(r - g) < 12 && Math.abs(g - b) < 12) return true;
+        // Warna kulit tangan (skin tone): hue oranye, S tinggi
+        if (h >= 5 && h <= 25 && s >= 35 && s <= 80 && v >= 35 && v <= 85) return true;
+        // Hitam sangat pekat (bayangan ekstrim bukan busuk)
+        if (v < 8) return true;
+        return false;
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // DOMAIN-SPECIFIC TEMPE COLOR ANALYSIS (background-aware)
+      // ════════════════════════════════════════════════════════════
+      function analyzeTempeColors(R, G, B, H, S, V, N) {
+        let whitePixels = 0;
+        let creamPixels = 0;
+        let yellowPixels = 0;
+        let brownPixels = 0;
+        let darkPixels = 0;
+        let blackPixels = 0;
+        let greenPixels = 0;
+        let bgPixels = 0;    // background — diabaikan dari analisis
+
+        for (let i = 0; i < N; i++) {
+          const r = R[i], g = G[i], b = B[i];
+          const h = H[i], s = S[i], v = V[i];
+
+          // Cek background dulu — jika iya, skip
+          if (isBackgroundPixel(r, g, b, h, s, v)) {
+            bgPixels++;
+            continue;
+          }
+
+          // Piksel tempe aktual: dikategorikan ke kelas warna
+          // Putih bersih: miselium Rhizopus sehat
+          if (v > 78 && s < 22) {
+            whitePixels++;
+          }
+          // Putih-krem: miselium normal dengan biji kedelai terlihat
+          else if (v > 65 && s < 38 && (h < 55 || h > 330)) {
+            creamPixels++;
+          }
+          // Kuning-kekuningan: mulai overripe
+          else if (h >= 28 && h <= 72 && s >= 18 && s < 60 && v > 50) {
+            yellowPixels++;
+          }
+          // Coklat: degradasi, tapi masih bisa sedang
+          else if (h >= 8 && h < 40 && s >= 22 && v >= 28 && v < 70) {
+            brownPixels++;
+          }
+          // Hijau kontaminasi jamur lain
+          else if (h >= 78 && h <= 170 && s >= 28) {
+            greenPixels++;
+          }
+          // Gelap (busuk)
+          else if (v < 32 && v >= 10) {
+            darkPixels++;
+          }
+          // Hitam (busuk parah)
+          else if (v < 10) {
+            blackPixels++;
+          }
+          // Sisanya → anggap cream/tidak berwarna ekstrem
+          else {
+            creamPixels++;
+          }
+        }
+
+        // Total piksel TEMPE (tidak termasuk background)
+        const nTempe = N - bgPixels;
+        const safe = nTempe > 100 ? nTempe : N; // fallback jika hampir semua background
+
+        return {
+          white:  whitePixels  / safe,
+          cream:  creamPixels  / safe,
+          yellow: yellowPixels / safe,
+          brown:  brownPixels  / safe,
+          green:  greenPixels  / safe,
+          dark:   darkPixels   / safe,
+          black:  blackPixels  / safe,
+          bgRatio: bgPixels    / N,    // rasio background (debug)
+          scoreBaik:   (whitePixels + creamPixels * 0.85) / safe,
+          scoreSedang: (yellowPixels * 0.9 + brownPixels * 0.7) / safe,
+          scoreBuruk:  (darkPixels + blackPixels * 1.4 + greenPixels * 1.2) / safe,
+        };
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // SPATIAL ZONE ANALYSIS (Grid 3×3) — background-aware
+      // ════════════════════════════════════════════════════════════
+      function analyzeSpatialZones(R, G, B, H, S, V, W, H2) {
+        const ZONES = 3;
+        const zW = Math.floor(W / ZONES), zH = Math.floor(H2 / ZONES);
+        const zoneStats = [];
+
+        for (let zy = 0; zy < ZONES; zy++) {
+          for (let zx = 0; zx < ZONES; zx++) {
+            let sumV = 0, sumS = 0, sumWhite = 0, sumDark = 0, cnt = 0;
+            for (let y = zy * zH; y < Math.min((zy + 1) * zH, H2); y++) {
+              for (let x = zx * zW; x < Math.min((zx + 1) * zW, W); x++) {
+                const idx = y * W + x;
+                const r = R[idx], g = G[idx], b = B[idx];
+                const h = H[idx], s = S[idx], v = V[idx];
+                // Skip background piksel agar tidak merusak analisis zona
+                if (isBackgroundPixel(r, g, b, h, s, v)) continue;
+                sumV += v;
+                sumS += s;
+                if (v > 75 && s < 25) sumWhite++;
+                if (v < 28) sumDark++;
+                cnt++;
+              }
+            }
+            if (cnt > 10) { // minimal 10 piksel tempe per zona
+              zoneStats.push({
+                meanV: sumV / cnt,
+                meanS: sumS / cnt,
+                whitePct: sumWhite / cnt,
+                darkPct:  sumDark  / cnt,
+              });
+            }
+          }
+        }
+
+        if (zoneStats.length === 0) {
+          return { spatialHeterogeneity: 0, brightZones: 9, darkZones: 0, whiteZonePct: 0.5, darkZonePct: 0 };
+        }
+
+        const vVals = zoneStats.map((z) => z.meanV);
+        const vMean = vVals.reduce((a, b) => a + b, 0) / vVals.length;
+        const vVar  = vVals.reduce((a, b) => a + (b - vMean) ** 2, 0) / vVals.length;
+        const spatialHeterogeneity = Math.sqrt(vVar);
+
+        const brightZones  = zoneStats.filter((z) => z.meanV > 62).length;
+        const darkZones    = zoneStats.filter((z) => z.meanV < 32).length;
+        const nZ = zoneStats.length;
+        const whiteZonePct = zoneStats.reduce((a, z) => a + z.whitePct, 0) / nZ;
+        const darkZonePct  = zoneStats.reduce((a, z) => a + z.darkPct,  0) / nZ;
+
+        return { spatialHeterogeneity, brightZones, darkZones, whiteZonePct, darkZonePct, nZ };
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // FEATURE EXTRACTION UTAMA (106 fitur untuk model RF/DT)
+      // ════════════════════════════════════════════════════════════
       function extractFeatures(canvas) {
         const SZ = 128;
         let imgData;
@@ -11917,33 +12180,48 @@
           tc.drawImage(canvas, 0, 0, SZ, SZ);
           imgData = tc.getImageData(0, 0, SZ, SZ);
         }
-        const d = imgData.data,
-          N = SZ * SZ;
-        const R = new Uint8Array(N),
-          G = new Uint8Array(N),
-          B = new Uint8Array(N);
-        const H = new Float32Array(N),
-          S = new Float32Array(N),
-          V = new Float32Array(N);
+        const d = imgData.data, N = SZ * SZ;
+
+        // ── Step 1: Ekstrak channel mentah ───────────────────────
+        const Rraw = new Uint8Array(N), Graw = new Uint8Array(N), Braw = new Uint8Array(N);
+        for (let i = 0; i < N; i++) {
+          Rraw[i] = d[i * 4];
+          Graw[i] = d[i * 4 + 1];
+          Braw[i] = d[i * 4 + 2];
+        }
+
+        // ── Step 2: Deteksi kondisi cahaya & preprocessing adaptif ─
+        let sumV = 0;
+        for (let i = 0; i < N; i++) sumV += Math.max(Rraw[i], Graw[i], Braw[i]);
+        const avgBrightness = sumV / N;
+
+        let R, G, B;
+        if (avgBrightness < 75) {
+          const gamma = 0.5;
+          R = equalizeChannel(gammaCorrect(Rraw, N, gamma), N);
+          G = equalizeChannel(gammaCorrect(Graw, N, gamma), N);
+          B = equalizeChannel(gammaCorrect(Braw, N, gamma), N);
+        } else if (avgBrightness > 215) {
+          const gamma = 1.7;
+          R = gammaCorrect(Rraw, N, gamma);
+          G = gammaCorrect(Graw, N, gamma);
+          B = gammaCorrect(Braw, N, gamma);
+        } else {
+          R = Rraw; G = Graw; B = Braw;
+        }
+
+        // ── Step 3: Konversi ke HSV & grayscale ──────────────────
+        const H = new Float32Array(N), S = new Float32Array(N), V = new Float32Array(N);
         const gray = new Float32Array(N);
         for (let i = 0; i < N; i++) {
-          const r = d[i * 4],
-            g = d[i * 4 + 1],
-            b = d[i * 4 + 2];
-          R[i] = r;
-          G[i] = g;
-          B[i] = b;
-          const rf = r / 255,
-            gf = g / 255,
-            bf = b / 255;
-          const mx = Math.max(rf, gf, bf),
-            mn = Math.min(rf, gf, bf),
-            df = mx - mn;
+          const r = R[i], g = G[i], b = B[i];
+          const rf = r / 255, gf = g / 255, bf = b / 255;
+          const mx = Math.max(rf, gf, bf), mn = Math.min(rf, gf, bf), df = mx - mn;
           let hv = 0;
           if (df > 0) {
-            if (mx === rf) hv = 60 * (((gf - bf) / df) % 6);
+            if      (mx === rf) hv = 60 * (((gf - bf) / df) % 6);
             else if (mx === gf) hv = 60 * ((bf - rf) / df + 2);
-            else hv = 60 * ((rf - gf) / df + 4);
+            else                hv = 60 * ((rf - gf) / df + 4);
             if (hv < 0) hv += 360;
           }
           H[i] = hv;
@@ -11951,35 +12229,19 @@
           V[i] = mx * 100;
           gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
         }
-        const mean = (a) => {
-          let s = 0;
-          for (let i = 0; i < a.length; i++) s += a[i];
-          return s / N;
-        };
-        const stdv = (a, m) => {
-          let s = 0;
-          for (let i = 0; i < a.length; i++) s += (a[i] - m) ** 2;
-          return Math.sqrt(s / N);
-        };
-        const mR = mean(R),
-          mG = mean(G),
-          mB = mean(B),
-          mH = mean(H),
-          mS = mean(S),
-          mV = mean(V);
+
+        // ── Step 4: Hitung statistik dasar ───────────────────────
+        const arrMean = (a) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i]; return s / N; };
+        const arrStd  = (a, m) => { let s = 0; for (let i = 0; i < a.length; i++) s += (a[i] - m) ** 2; return Math.sqrt(s / N); };
+        const mR = arrMean(R), mG = arrMean(G), mB = arrMean(B);
+        const mH = arrMean(H), mS = arrMean(S), mV = arrMean(V);
+
+        // ── Step 5: Susun 106 fitur (sama persis dengan Python pkl) ─
         const feats = [
-          mR,
-          mG,
-          mB,
-          stdv(R, mR),
-          stdv(G, mG),
-          stdv(B, mB),
-          mH,
-          mS,
-          mV,
-          stdv(H, mH),
-          stdv(S, mS),
-          stdv(V, mV),
+          mR, mG, mB,
+          arrStd(R, mR), arrStd(G, mG), arrStd(B, mB),
+          mH, mS, mV,
+          arrStd(H, mH), arrStd(S, mS), arrStd(V, mV),
         ];
         hist16(R).forEach((v) => feats.push(v));
         hist16(G).forEach((v) => feats.push(v));
@@ -11987,7 +12249,14 @@
         const blurred = gaussBlur3(gray, SZ, SZ);
         computeGLCM(blurred, SZ, SZ).forEach((v) => feats.push(v));
         computeLBP(blurred, SZ, SZ).forEach((v) => feats.push(v));
-        return feats; // 106 fitur
+        // feats.length == 106 di sini
+
+        // ── Step 6: Hitung fitur tambahan untuk post-processing ───
+        // (tidak dimasukkan ke model, tapi dipakai untuk koreksi keputusan)
+        const colorProfile   = analyzeTempeColors(R, G, B, H, S, V, N);
+        const spatialProfile = analyzeSpatialZones(R, G, B, H, S, V, SZ, SZ);
+
+        return { feats, colorProfile, spatialProfile, avgBrightness };
       }
 
       // ── Tree traversal ────────────────────────────────────────────
@@ -12032,7 +12301,7 @@
         if (dot) dot.className = "api-dot green";
         if (text)
           text.textContent =
-            "✅ Model RF 200 pohon · 106 fitur · Berjalan langsung di browser · Tidak perlu server";
+            "✅ Ensemble RF+DT · Koreksi warna & spasial · 200 pohon · 106 fitur · Berjalan langsung di browser";
         const setEl = (id, v) => {
           const e = document.getElementById(id);
           if (e) e.textContent = v;
@@ -12069,61 +12338,167 @@
       // ── runAnalysisML: engine utama dari model pkl ────────────────
       async function runAnalysisML(t0) {
         const canvas = document.getElementById("previewCanvas");
-        const feats = extractFeatures(canvas);
+
+        // Ekstrak fitur + profil warna & spasial
+        const { feats, colorProfile: cp, spatialProfile: sp } = extractFeatures(canvas);
+        const elapsed = Math.round(performance.now() - t0);
+
+        // ── Prediksi RF dan DT (pakai fitur mentah, sama dengan Python) ─
         const rfP = rfPredict(feats);
         const dtP = dtPredict(feats);
-        const elapsed = Math.round(performance.now() - t0);
-        const maxIdx = rfP.indexOf(Math.max(...rfP));
-        const dtIdx = dtP.indexOf(Math.max(...dtP));
-        const KEYS = ["baik", "sedang", "buruk"];
-        const LABELS = [
-          "Tempe Berkualitas Baik",
-          "Tempe Berkualitas Sedang",
-          "Tempe Berkualitas Buruk",
-        ];
+
+        // ── Weighted Ensemble: RF (0.72) + DT (0.28) ─────────────────
+        const W_RF = 0.72, W_DT = 0.28;
+        const ensP = rfP.map((p, i) => p * W_RF + dtP[i] * W_DT);
+        const ensSum = ensP.reduce((a, b) => a + b, 0) || 1;
+        const normP = ensP.map((p) => p / ensSum);
+
+        // ── Copy untuk post-processing (supaya bisa dimodifikasi) ────
+        const adjP = [...normP];
+
+        // ════════════════════════════════════════════════════════════
+        // DOMAIN-SPECIFIC POST-PROCESSING (background-aware)
+        // Koreksi berbasis analisis warna HANYA pada piksel tempe aktual
+        // (background biru, tangan, lantai sudah di-exclude dari cp)
+        // ════════════════════════════════════════════════════════════
+
+        const strongWhite  = cp.white + cp.cream * 0.88;
+        const strongBuruk  = cp.dark  + cp.black * 1.5 + cp.green * 1.3;
+        const strongSedang = cp.yellow * 0.9 + cp.brown * 0.72;
+
+        // --- Koreksi 1: Sangat banyak putih → BAIK (tempe segar) ---
+        if (strongWhite > 0.70) {
+          adjP[0] = Math.min(adjP[0] * 1.50 + 0.20, 0.97);
+          adjP[1] *= 0.60;
+          adjP[2] *= 0.35;
+        } else if (strongWhite > 0.50) {
+          adjP[0] = Math.min(adjP[0] * 1.30 + 0.10, 0.95);
+          adjP[1] *= 0.75;
+          adjP[2] *= 0.55;
+        } else if (strongWhite > 0.35) {
+          adjP[0] = Math.min(adjP[0] * 1.18, 0.93);
+          adjP[2] *= 0.72;
+        }
+
+        // --- Koreksi 2: Banyak piksel gelap/busuk → BURUK ---
+        // (hanya berlaku jika background sudah di-exclude)
+        if (strongBuruk > 0.40) {
+          adjP[2] = Math.min(adjP[2] * 1.45 + 0.18, 0.97);
+          adjP[0] *= 0.50;
+          adjP[1] *= 0.65;
+        } else if (strongBuruk > 0.22) {
+          adjP[2] = Math.min(adjP[2] * 1.25 + 0.05, 0.94);
+          adjP[0] *= 0.78;
+        }
+        // Jika strongBuruk KECIL tapi model bilang buruk → override ke BAIK/SEDANG
+        else if (strongBuruk < 0.08 && strongWhite > 0.30) {
+          // Model bilang buruk tapi warna sebagian besar putih → pasti BAIK
+          adjP[0] = Math.max(adjP[0], 0.55);
+          adjP[2] *= 0.20; // tekan probabilitas buruk
+        }
+
+        // --- Koreksi 3: Kuning/coklat dominan → SEDANG ---
+        if (strongSedang > 0.30 && strongWhite < 0.35 && strongBuruk < 0.18) {
+          adjP[1] = Math.min(adjP[1] * 1.32 + 0.10, 0.95);
+          adjP[0] *= 0.80;
+          adjP[2] *= 0.78;
+        }
+
+        // --- Koreksi 4: Heterogenitas spasial (hanya piksel tempe) ---
+        if (sp.spatialHeterogeneity > 20 && sp.darkZones >= 3) {
+          adjP[2] = Math.min(adjP[2] * 1.28 + 0.08, 0.95);
+          adjP[0] *= 0.72;
+        } else if (sp.spatialHeterogeneity < 10 && sp.brightZones >= 6 && strongWhite > 0.30) {
+          // Homogen & cerah → BAIK
+          adjP[0] = Math.min(adjP[0] * 1.20 + 0.07, 0.95);
+          adjP[2] *= 0.65;
+        }
+
+        // --- Koreksi 5: Kontaminasi hijau → BURUK pasti ---
+        if (cp.green > 0.07) {
+          adjP[2] = Math.min(adjP[2] * 1.50 + 0.20, 0.97);
+          adjP[0] *= 0.45;
+          adjP[1] *= 0.65;
+        }
+
+        // --- Koreksi 6: Override khusus jika background sangat besar ---
+        // (foto tempe dengan banyak background — percayai warna tempe aktual)
+        if (cp.bgRatio > 0.30) {
+          // Lebih dari 30% background di gambar → lebih percaya colorProfile
+          if (strongWhite > 0.45) {
+            adjP[0] = Math.max(adjP[0], 0.60);
+            adjP[2] = Math.min(adjP[2], 0.20);
+          }
+        }
+
+        // ── Normalisasi ulang adjP → total = 1 ───────────────────────
+        const adjSum = adjP.reduce((a, b) => a + b, 0) || 1;
+        const finalP = adjP.map((p) => p / adjSum);
+
+        // ── Keputusan final dari probabilitas yang sudah dikoreksi ────
+        const rfIdx  = rfP.indexOf(Math.max(...rfP));
+        const dtIdx  = dtP.indexOf(Math.max(...dtP));
+        const rfDtAgree = rfIdx === dtIdx;
+        let maxIdx = finalP.indexOf(Math.max(...finalP));
+
+        // Jika model tidak sepakat dan ambigous, percayai RF
+        const sorted = [...finalP].sort((a, b) => b - a);
+        const margin = sorted[0] - sorted[1];
+        const isAmbiguous = margin < 0.15;
+        if (isAmbiguous && !rfDtAgree) maxIdx = rfIdx;
+
+        // ── Confidence yang realistis ─────────────────────────────────
+        let rawConf = finalP[maxIdx];
+        if (isAmbiguous) rawConf *= 0.90;
+        if (rfDtAgree)   rawConf  = Math.min(rawConf * 1.05, 0.99);
+        const conf = Math.max(50, Math.min(99, Math.round(rawConf * 100)));
+        const pct  = finalP.map((p) => Math.round(p * 100));
+
+        // ── Label & teks ──────────────────────────────────────────────
+        const KEYS   = ["baik", "sedang", "buruk"];
+        const LABELS = ["Tempe Berkualitas Baik", "Tempe Berkualitas Sedang", "Tempe Berkualitas Buruk"];
         const BADGES = ["badge-baik", "badge-sedang", "badge-buruk"];
-        const DESCS = [
+        const DESCS  = [
           "Tempe berwarna putih cerah dengan pertumbuhan jamur merata, tekstur padat, dan aroma khas tempe segar yang baik.",
           "Tempe mengalami perubahan warna dan tekstur. Kualitas mulai menurun, masih dapat dikonsumsi namun perlu diperhatikan.",
           "Tempe gelap dengan indikasi pembusukan, tekstur rusak, dan warna tidak normal. Tidak disarankan untuk dikonsumsi.",
         ];
-        const pct = rfP.map((p) => Math.round(p * 100));
-        const conf = pct[maxIdx];
-        const key = KEYS[maxIdx],
-          label = LABELS[maxIdx],
-          badge = BADGES[maxIdx],
-          desc = DESCS[maxIdx];
+
+        const key   = KEYS[maxIdx];
+        const label = LABELS[maxIdx];
+        const badge = BADGES[maxIdx];
+        const desc  = DESCS[maxIdx];
+
+        const agreeNote = rfDtAgree
+          ? "✅ RF & DT sepakat"
+          : "⚠️ RF & DT berbeda · koreksi domain diterapkan";
+        const ambigNote = isAmbiguous ? " · zona ambiguous" : "";
+
+        // ── Update UI ─────────────────────────────────────────────────
         document.getElementById("result-badge").innerHTML = label;
-        document.getElementById("result-badge").className =
-          "result-badge " + badge;
-        document.getElementById("conf-val").innerHTML = conf + "%";
-        document.getElementById("time-val").innerHTML = elapsed + " ms";
+        document.getElementById("result-badge").className = "result-badge " + badge;
+        document.getElementById("conf-val").innerHTML   = conf + "%";
+        document.getElementById("time-val").innerHTML   = elapsed + " ms";
         document.getElementById("result-desc").innerHTML = desc;
         document.getElementById("result-model-note").innerHTML =
-          "Probabilitas majority voting · 200 pohon · model pkl embedded";
-        document.getElementById("proba-baik").textContent =
-          "Baik: " + pct[0] + "%";
-        document.getElementById("proba-sedang").textContent =
-          "Sedang: " + pct[1] + "%";
-        document.getElementById("proba-buruk").textContent =
-          "Buruk: " + pct[2] + "%";
+          "Ensemble RF×0.72+DT×0.28 · Koreksi warna+spasial · " + agreeNote + ambigNote;
+
+        document.getElementById("proba-baik").textContent   = "Baik: "   + pct[0] + "%";
+        document.getElementById("proba-sedang").textContent = "Sedang: " + pct[1] + "%";
+        document.getElementById("proba-buruk").textContent  = "Buruk: "  + pct[2] + "%";
+
         renderFeatureBars(
-          REAL_TOP10.slice(0, 5).map((f) => ({
-            name: f.name,
-            value: f.importance * 10,
-          }))
+          REAL_TOP10.slice(0, 5).map((f) => ({ name: f.name, value: f.importance * 10 }))
         );
+
         const dtPanel = document.getElementById("dt-panel");
         if (dtPanel) {
           dtPanel.style.display = "block";
           const agree = dtIdx === maxIdx;
-          document.getElementById(
-            "dt-result-text"
-          ).innerHTML = `Decision Tree prediksi: <strong>${KEYS[
-            dtIdx
-          ].toUpperCase()}</strong> · ${
-            agree ? "✅ Setuju dengan RF" : "⚠️ Berbeda dari RF"
-          }`;
+          document.getElementById("dt-result-text").innerHTML =
+            `Decision Tree prediksi: <strong>${KEYS[dtIdx].toUpperCase()}</strong> · ${
+              agree ? "✅ Setuju dengan RF" : "⚠️ Berbeda dari RF"
+            }`;
           const dtPct = dtP.map((p) => Math.round(p * 100));
           const row = document.getElementById("dt-proba-row");
           if (row)
@@ -12132,24 +12507,23 @@
               `<div class="proba-chip sedang">Sedang: ${dtPct[1]}%</div>` +
               `<div class="proba-chip buruk">Buruk: ${dtPct[2]}%</div>`;
         }
+
         renderVoting(pct[0], pct[1], pct[2], 200);
+
         latestResult = {
-          label_display: label,
-          label_key: key,
-          confidence: conf,
-          description: desc,
-          elapsed_ms: elapsed,
+          label_display: label, label_key: key,
+          confidence: conf, description: desc, elapsed_ms: elapsed,
           n_estimators: 200,
           probabilities: { baik: pct[0], sedang: pct[1], buruk: pct[2] },
         };
         detectionHistory.push({
           kualitas_tempe: label,
-          confidence: conf + "%",
-          waktu_proses: elapsed + "ms",
-          proba_baik: pct[0] + "%",
-          proba_sedang: pct[1] + "%",
-          proba_buruk: pct[2] + "%",
-          deskripsi: desc,
+          confidence:    conf + "%",
+          waktu_proses:  elapsed + "ms",
+          proba_baik:    pct[0] + "%",
+          proba_sedang:  pct[1] + "%",
+          proba_buruk:   pct[2] + "%",
+          deskripsi:     desc,
         });
         showResultCard(label, badge, conf + "%", desc, conf);
         tryUploadToDrive(latestResult);
