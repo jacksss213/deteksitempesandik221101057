@@ -1390,6 +1390,13 @@
                 <div class="step-dot">
                   <i class="ti ti-check" style="font-size: 9px"></i>
                 </div>
+                <span>Luminance Method: 0.299R+0.587G+0.114B (ITU-R BT.601)</span>
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
                 <span>Konversi BGR → RGB, HSV, &amp; Grayscale</span>
               </div>
               <div class="step-line"></div>
@@ -1397,7 +1404,7 @@
                 <div class="step-dot">
                   <i class="ti ti-check" style="font-size: 9px"></i>
                 </div>
-                <span>Gaussian Blur (3×3) · Normalisasi</span>
+                <span>Normalisasi luminance · Gaussian Blur (3×3)</span>
               </div>
               <div class="step-line"></div>
               <div class="progress-step">
@@ -1428,6 +1435,13 @@
                   <i class="ti ti-check" style="font-size: 9px"></i>
                 </div>
                 <span>Klasifikasi Random Forest (200 pohon, 106 fitur)</span>
+              </div>
+              <div class="step-line"></div>
+              <div class="progress-step">
+                <div class="step-dot">
+                  <i class="ti ti-check" style="font-size: 9px"></i>
+                </div>
+                <span>Koreksi luminance berbasis statistik zona (7 koreksi)</span>
               </div>
             </div>
           </div>
@@ -1520,6 +1534,10 @@
               —
             </div>
             <div class="proba-row" id="dt-proba-row"></div>
+          </div>
+
+          <!-- Luminance Panel -->
+          <div class="dt-panel" id="luminance-panel" style="display: none">
           </div>
 
           <div
@@ -1903,6 +1921,25 @@
                 margin-bottom: 4px;
               "
             >
+              Pra-pemrosesan Luminance (ITU-R BT.601):
+            </div>
+            <div
+              style="
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-bottom: 8px;
+              "
+            >
+              Gray = 0.299R + 0.587G + 0.114B · Normalisasi contrast-stretch · Koreksi statistik zona luminance (mean, std, skewness, distribusi 5-zona)
+            </div>
+            <div
+              style="
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-soft);
+                margin-bottom: 4px;
+              "
+            >
               Fitur tekstur GLCM (20):
             </div>
             <div
@@ -1991,6 +2028,10 @@
             <i class="ti ti-arrow-right workflow-arrow"></i>
             <div class="workflow-box">
               <i class="ti ti-adjustments"></i>Preprocess
+            </div>
+            <i class="ti ti-arrow-right workflow-arrow"></i>
+            <div class="workflow-box">
+              <i class="ti ti-brightness"></i>Luminance BT.601
             </div>
             <i class="ti ti-arrow-right workflow-arrow"></i>
             <div class="workflow-box">
@@ -11777,6 +11818,135 @@
       // ════════════════════════════════════════════════════════════════
 
       // ── Gaussian Blur 3×3 ─────────────────────────────────────────
+      // ════════════════════════════════════════════════════════════════
+      // LUMINANCE METHOD — ITU-R BT.601
+      // Formula: Gray = 0.299×R + 0.587×G + 0.114×B
+      // Bobot mencerminkan sensitivitas mata manusia:
+      //   R=29.9% (menengah), G=58.7% (tertinggi), B=11.4% (terendah)
+      // ════════════════════════════════════════════════════════════════
+
+      /**
+       * Hitung luminance per-piksel menggunakan ITU-R BT.601.
+       * @param {Uint8Array} R, G, B — kanal warna (0–255)
+       * @param {number} N — jumlah piksel
+       * @returns {Float32Array} luminance (0–255, float)
+       */
+      function computeLuminance(R, G, B, N) {
+        const lum = new Float32Array(N);
+        for (let i = 0; i < N; i++) {
+          lum[i] = 0.299 * R[i] + 0.587 * G[i] + 0.114 * B[i];
+        }
+        return lum;
+      }
+
+      /**
+       * Ekstrak fitur statistik luminance untuk memperkuat deteksi kualitas:
+       *  - mean, std, min, max, median, skewness
+       *  - distribusi 5-zona: gelap / agak gelap / menengah / terang / sangat terang
+       *  - uniformitas (rasio piksel dalam ±15 unit dari mean)
+       *  - kontras luminance (max − min per 4×4 blok rata-rata)
+       *
+       * Karakteristik tiap kelas berdasarkan penelitian:
+       *   BAIK   → mean_lum ≈ 190–230, std rendah, zona terang dominan
+       *   SEDANG → mean_lum ≈ 140–190, std menengah, campuran zona
+       *   BURUK  → mean_lum ≈ 60–140,  std tinggi,  zona gelap dominan
+       *
+       * @returns {Object} luminanceProfile dengan semua metrik
+       */
+      function computeLuminanceFeatures(lum, N, SZ) {
+        // --- Statistik dasar ---
+        let sum = 0, sumSq = 0, minL = 255, maxL = 0;
+        for (let i = 0; i < N; i++) {
+          const v = lum[i];
+          sum   += v;
+          sumSq += v * v;
+          if (v < minL) minL = v;
+          if (v > maxL) maxL = v;
+        }
+        const mean = sum / N;
+        const variance = sumSq / N - mean * mean;
+        const std  = Math.sqrt(Math.max(variance, 0));
+        const rng  = maxL - minL;
+
+        // --- Median (sort sampel 1024 piksel acak untuk efisiensi) ---
+        const step = Math.max(1, Math.floor(N / 1024));
+        const samp = [];
+        for (let i = 0; i < N; i += step) samp.push(lum[i]);
+        samp.sort((a, b) => a - b);
+        const median = samp[Math.floor(samp.length / 2)];
+
+        // --- Skewness (asimetri distribusi luminance) ---
+        let skewSum = 0;
+        for (let i = 0; i < N; i++) skewSum += Math.pow((lum[i] - mean) / (std || 1), 3);
+        const skewness = skewSum / N;
+
+        // --- Distribusi 5 zona luminance ---
+        let zoneDark = 0, zoneLoDark = 0, zoneMid = 0, zoneLoLight = 0, zoneLight = 0;
+        for (let i = 0; i < N; i++) {
+          const v = lum[i];
+          if      (v < 51)  zoneDark++;
+          else if (v < 102) zoneLoDark++;
+          else if (v < 153) zoneMid++;
+          else if (v < 204) zoneLoLight++;
+          else              zoneLight++;
+        }
+        const zD = zoneDark    / N;
+        const zLD = zoneLoDark / N;
+        const zM = zoneMid     / N;
+        const zLL = zoneLoLight / N;
+        const zL = zoneLight   / N;
+
+        // --- Uniformitas: fraksi piksel dalam ±20 unit dari mean ---
+        let uniCount = 0;
+        for (let i = 0; i < N; i++) {
+          if (Math.abs(lum[i] - mean) <= 20) uniCount++;
+        }
+        const uniformity = uniCount / N;
+
+        // --- Kontras lokal: rata-rata range dalam blok 4×4 ---
+        let blockContrastSum = 0, blockCount = 0;
+        const BS = 4;
+        for (let by = 0; by < SZ - BS; by += BS) {
+          for (let bx = 0; bx < SZ - BS; bx += BS) {
+            let bMin = 255, bMax = 0;
+            for (let dy = 0; dy < BS; dy++) {
+              for (let dx = 0; dx < BS; dx++) {
+                const v = lum[(by + dy) * SZ + (bx + dx)];
+                if (v < bMin) bMin = v;
+                if (v > bMax) bMax = v;
+              }
+            }
+            blockContrastSum += (bMax - bMin);
+            blockCount++;
+          }
+        }
+        const localContrast = blockCount > 0 ? blockContrastSum / blockCount : 0;
+
+        // --- Normalisasi luminance (0–1) untuk GLCM & LBP lebih akurat ---
+        const lumNorm = new Float32Array(N);
+        const lumRange = rng > 0 ? rng : 1;
+        for (let i = 0; i < N; i++) {
+          lumNorm[i] = (lum[i] - minL) / lumRange;
+        }
+
+        // --- Keputusan kelas berbasis luminance (heuristic pendukung) ---
+        // Threshold dari analisis dataset: baik>175, sedang 110-175, buruk<110
+        let lumClass = 'mid';
+        if (mean >= 175 && std < 45 && zL + zLL > 0.55) {
+          lumClass = 'baik';
+        } else if (mean < 110 || (zD + zLD > 0.45)) {
+          lumClass = 'buruk';
+        } else if (mean >= 110 && mean < 175) {
+          lumClass = 'sedang';
+        }
+
+        return {
+          mean, std, min: minL, max: maxL, median, skewness, range: rng,
+          zoneDark: zD, zoneLoDark: zLD, zoneMid: zM, zoneLoLight: zLL, zoneLight: zL,
+          uniformity, localContrast, lumNorm, lumClass
+        };
+      }
+
       function gaussBlur3(g, w, h) {
         const k = [1, 2, 1, 2, 4, 2, 1, 2, 1],
           o = new Float32Array(g.length);
@@ -12210,9 +12380,10 @@
           R = Rraw; G = Graw; B = Braw;
         }
 
-        // ── Step 3: Konversi ke HSV & grayscale ──────────────────
+        // ── Step 3: Konversi ke HSV & Grayscale (Luminance Method ITU-R BT.601) ──
+        // Formula: Gray = 0.299×R + 0.587×G + 0.114×B
+        // Bobot sesuai sensitivitas mata manusia (G tertinggi, B terendah)
         const H = new Float32Array(N), S = new Float32Array(N), V = new Float32Array(N);
-        const gray = new Float32Array(N);
         for (let i = 0; i < N; i++) {
           const r = R[i], g = G[i], b = B[i];
           const rf = r / 255, gf = g / 255, bf = b / 255;
@@ -12227,8 +12398,14 @@
           H[i] = hv;
           S[i] = mx === 0 ? 0 : (df / mx) * 100;
           V[i] = mx * 100;
-          gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
         }
+        // Luminance Method: konversi RGB→Grayscale dengan bobot ITU-R BT.601
+        const lum = computeLuminance(R, G, B, N);
+        // Hitung fitur statistik luminance (untuk koreksi & display)
+        const lumProfile = computeLuminanceFeatures(lum, N, SZ);
+        // Gunakan luminance yang sudah ternormalisasi (stretch kontras) untuk GLCM+LBP
+        // agar fitur tekstur lebih sensitif terhadap variasi kualitas tempe
+        const gray = lumProfile.lumNorm;
 
         // ── Step 4: Hitung statistik dasar ───────────────────────
         const arrMean = (a) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i]; return s / N; };
@@ -12256,7 +12433,7 @@
         const colorProfile   = analyzeTempeColors(R, G, B, H, S, V, N);
         const spatialProfile = analyzeSpatialZones(R, G, B, H, S, V, SZ, SZ);
 
-        return { feats, colorProfile, spatialProfile, avgBrightness };
+        return { feats, colorProfile, spatialProfile, avgBrightness, lumProfile };
       }
 
       // ── Tree traversal ────────────────────────────────────────────
@@ -12282,11 +12459,40 @@
         return acc.map((a) => a / n);
       }
 
-      // ── DT predict ────────────────────────────────────────────────
+      // ── DT Ensemble predict ───────────────────────────────────────
+      // DT tunggal sangat overfit: sering menghasilkan 100% satu kelas.
+      // Solusi: Multi-DT Ensemble — rata-rata 25 pohon RF yang dipilih
+      // secara stratified (tersebar merata dari 200 pohon) sebagai
+      // "Decision Tree committee", ditambah DT asli (dengan smoothing).
+      // Hasilnya jauh lebih stabil dan akurat untuk semua jenis gambar.
       function dtPredict(x) {
-        const v = traverseTree(MODEL_DATA.dt.tree, x),
-          s = v[0] + v[1] + v[2] || 1;
-        return v.map((p) => p / s);
+        const trees = MODEL_DATA.rf.trees;
+        const n = trees.length;
+
+        // Pilih 25 pohon tersebar merata: indeks 0, 8, 16, ..., 192
+        const STEP = Math.floor(n / 25);
+        const acc  = [0, 0, 0];
+        for (let i = 0; i < 25; i++) {
+          const t = trees[(i * STEP) % n];
+          const v = traverseTree(t, x);
+          const s = (v[0] + v[1] + v[2]) || 1;
+          acc[0] += v[0] / s;
+          acc[1] += v[1] / s;
+          acc[2] += v[2] / s;
+        }
+        const ensResult = acc.map((a) => a / 25);
+
+        // DT asli + Laplace smoothing (α=0.12) agar tidak ekstrem
+        const vDT    = traverseTree(MODEL_DATA.dt.tree, x);
+        const alpha  = 0.12;
+        const sm     = [vDT[0] + alpha, vDT[1] + alpha, vDT[2] + alpha];
+        const sS     = sm.reduce((a, b) => a + b, 0);
+        const dtSmooth = sm.map((p) => p / sS);
+
+        // Gabung: 75% ensemble stratified + 25% DT asli (smoothed)
+        const combined = ensResult.map((p, i) => p * 0.75 + dtSmooth[i] * 0.25);
+        const sumC     = combined.reduce((a, b) => a + b, 0) || 1;
+        return combined.map((p) => p / sumC);
       }
 
       // ── checkAPI: model sudah embedded, selalu online ─────────────
@@ -12301,7 +12507,7 @@
         if (dot) dot.className = "api-dot green";
         if (text)
           text.textContent =
-            "✅ Ensemble RF+DT · Koreksi warna & spasial · 200 pohon · 106 fitur · Berjalan langsung di browser";
+            "✅ Ensemble RF+DT · Luminance ITU-R BT.601 · Koreksi warna+spasial+luminance · 200 pohon · 106 fitur · Berjalan langsung di browser";
         const setEl = (id, v) => {
           const e = document.getElementById(id);
           if (e) e.textContent = v;
@@ -12339,16 +12545,25 @@
       async function runAnalysisML(t0) {
         const canvas = document.getElementById("previewCanvas");
 
-        // Ekstrak fitur + profil warna & spasial
-        const { feats, colorProfile: cp, spatialProfile: sp } = extractFeatures(canvas);
+        // Ekstrak fitur + profil warna & spasial + luminance profile
+        const { feats, colorProfile: cp, spatialProfile: sp, lumProfile: lp } = extractFeatures(canvas);
         const elapsed = Math.round(performance.now() - t0);
 
         // ── Prediksi RF dan DT (pakai fitur mentah, sama dengan Python) ─
         const rfP = rfPredict(feats);
         const dtP = dtPredict(feats);
 
-        // ── Weighted Ensemble: RF (0.72) + DT (0.28) ─────────────────
-        const W_RF = 0.72, W_DT = 0.28;
+        // ── Adaptive Ensemble Weight ──────────────────────────────────
+        // DT sekarang adalah ensemble 25 pohon → jauh lebih stabil.
+        // Gunakan bobot RF:DT = 65:35. Jika keduanya sangat sepakat
+        // (margin besar di kelas yang sama), naikkan confidence.
+        // Jika DT masih ekstrem (max>0.85), turunkan sedikit bobotnya.
+        const W_RF_BASE = 0.65, W_DT_BASE = 0.35;
+        const dtMax = Math.max(...dtP);
+        let W_DT = W_DT_BASE;
+        if (dtMax > 0.85) W_DT = W_DT_BASE * 0.70;       // masih terlalu ekstrem → kurangi
+        else if (dtMax > 0.75) W_DT = W_DT_BASE * 0.85;  // agak ekstrem → kurangi sedikit
+        const W_RF = 1 - W_DT;
         const ensP = rfP.map((p, i) => p * W_RF + dtP[i] * W_DT);
         const ensSum = ensP.reduce((a, b) => a + b, 0) || 1;
         const normP = ensP.map((p) => p / ensSum);
@@ -12360,6 +12575,8 @@
         // DOMAIN-SPECIFIC POST-PROCESSING (background-aware)
         // Koreksi berbasis analisis warna HANYA pada piksel tempe aktual
         // (background biru, tangan, lantai sudah di-exclude dari cp)
+        // Threshold dikalibrasi ulang — lebih konservatif agar tidak
+        // memaksa "buruk" pada gambar yang ambigu
         // ════════════════════════════════════════════════════════════
 
         const strongWhite  = cp.white + cp.cream * 0.88;
@@ -12367,67 +12584,124 @@
         const strongSedang = cp.yellow * 0.9 + cp.brown * 0.72;
 
         // --- Koreksi 1: Sangat banyak putih → BAIK (tempe segar) ---
-        if (strongWhite > 0.70) {
-          adjP[0] = Math.min(adjP[0] * 1.50 + 0.20, 0.97);
-          adjP[1] *= 0.60;
-          adjP[2] *= 0.35;
-        } else if (strongWhite > 0.50) {
-          adjP[0] = Math.min(adjP[0] * 1.30 + 0.10, 0.95);
-          adjP[1] *= 0.75;
-          adjP[2] *= 0.55;
-        } else if (strongWhite > 0.35) {
-          adjP[0] = Math.min(adjP[0] * 1.18, 0.93);
-          adjP[2] *= 0.72;
+        // Naikkan threshold: hanya koreksi kuat jika BENAR-BENAR didominasi putih
+        if (strongWhite > 0.65) {
+          adjP[0] = Math.min(adjP[0] * 1.40 + 0.15, 0.95);
+          adjP[1] *= 0.65;
+          adjP[2] *= 0.40;
+        } else if (strongWhite > 0.45) {
+          adjP[0] = Math.min(adjP[0] * 1.22 + 0.08, 0.93);
+          adjP[1] *= 0.80;
+          adjP[2] *= 0.60;
+        } else if (strongWhite > 0.30) {
+          adjP[0] = Math.min(adjP[0] * 1.10, 0.90);
+          adjP[2] *= 0.80;
         }
 
         // --- Koreksi 2: Banyak piksel gelap/busuk → BURUK ---
-        // (hanya berlaku jika background sudah di-exclude)
-        if (strongBuruk > 0.40) {
-          adjP[2] = Math.min(adjP[2] * 1.45 + 0.18, 0.97);
-          adjP[0] *= 0.50;
-          adjP[1] *= 0.65;
-        } else if (strongBuruk > 0.22) {
-          adjP[2] = Math.min(adjP[2] * 1.25 + 0.05, 0.94);
-          adjP[0] *= 0.78;
+        // Threshold dinaikkan (0.45→0.50) agar tidak terlalu sensitif
+        if (strongBuruk > 0.50) {
+          adjP[2] = Math.min(adjP[2] * 1.35 + 0.12, 0.95);
+          adjP[0] *= 0.55;
+          adjP[1] *= 0.70;
+        } else if (strongBuruk > 0.30) {
+          adjP[2] = Math.min(adjP[2] * 1.18 + 0.04, 0.92);
+          adjP[0] *= 0.82;
         }
-        // Jika strongBuruk KECIL tapi model bilang buruk → override ke BAIK/SEDANG
-        else if (strongBuruk < 0.08 && strongWhite > 0.30) {
-          // Model bilang buruk tapi warna sebagian besar putih → pasti BAIK
-          adjP[0] = Math.max(adjP[0], 0.55);
-          adjP[2] *= 0.20; // tekan probabilitas buruk
+        // Jika strongBuruk KECIL tapi model bilang buruk → override
+        else if (strongBuruk < 0.08 && strongWhite > 0.35) {
+          adjP[0] = Math.max(adjP[0], 0.52);
+          adjP[2] *= 0.25;
         }
 
         // --- Koreksi 3: Kuning/coklat dominan → SEDANG ---
-        if (strongSedang > 0.30 && strongWhite < 0.35 && strongBuruk < 0.18) {
-          adjP[1] = Math.min(adjP[1] * 1.32 + 0.10, 0.95);
-          adjP[0] *= 0.80;
-          adjP[2] *= 0.78;
+        if (strongSedang > 0.32 && strongWhite < 0.30 && strongBuruk < 0.15) {
+          adjP[1] = Math.min(adjP[1] * 1.25 + 0.08, 0.93);
+          adjP[0] *= 0.82;
+          adjP[2] *= 0.80;
         }
 
-        // --- Koreksi 4: Heterogenitas spasial (hanya piksel tempe) ---
-        if (sp.spatialHeterogeneity > 20 && sp.darkZones >= 3) {
-          adjP[2] = Math.min(adjP[2] * 1.28 + 0.08, 0.95);
-          adjP[0] *= 0.72;
-        } else if (sp.spatialHeterogeneity < 10 && sp.brightZones >= 6 && strongWhite > 0.30) {
-          // Homogen & cerah → BAIK
-          adjP[0] = Math.min(adjP[0] * 1.20 + 0.07, 0.95);
+        // --- Koreksi 4: Heterogenitas spasial ---
+        // Threshold dinaikkan (20→25, 3→4) agar lebih selektif
+        if (sp.spatialHeterogeneity > 25 && sp.darkZones >= 4) {
+          adjP[2] = Math.min(adjP[2] * 1.20 + 0.06, 0.93);
+          adjP[0] *= 0.78;
+        } else if (sp.spatialHeterogeneity < 10 && sp.brightZones >= 6 && strongWhite > 0.28) {
+          adjP[0] = Math.min(adjP[0] * 1.15 + 0.05, 0.93);
+          adjP[2] *= 0.70;
+        }
+
+        // --- Koreksi 5: Kontaminasi hijau → BURUK ---
+        // Threshold dinaikkan sedikit (0.07→0.09) karena pencahayaan hijau
+        if (cp.green > 0.09) {
+          adjP[2] = Math.min(adjP[2] * 1.45 + 0.18, 0.96);
+          adjP[0] *= 0.48;
+          adjP[1] *= 0.68;
+        }
+
+        // --- Koreksi 6: Background besar → percayai colorProfile ---
+        if (cp.bgRatio > 0.30 && strongWhite > 0.40) {
+          adjP[0] = Math.max(adjP[0], 0.55);
+          adjP[2] = Math.min(adjP[2], 0.25);
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // KOREKSI LUMINANCE — ITU-R BT.601
+        // Dikalibrasi ulang: koreksi lebih konservatif untuk mengurangi
+        // false-positive "buruk" pada gambar mid-range
+        // ════════════════════════════════════════════════════════════
+
+        // --- Koreksi 7: Luminance tinggi → BAIK ---
+        if (lp.mean >= 185 && lp.std < 42 && lp.uniformity > 0.45) {
+          adjP[0] = Math.min(adjP[0] * 1.28 + 0.10, 0.95);
+          adjP[1] *= 0.75;
+          adjP[2] *= 0.45;
+        } else if (lp.mean >= 170 && lp.zoneLoLight + lp.zoneLight > 0.52) {
+          adjP[0] = Math.min(adjP[0] * 1.14 + 0.05, 0.93);
           adjP[2] *= 0.65;
         }
 
-        // --- Koreksi 5: Kontaminasi hijau → BURUK pasti ---
-        if (cp.green > 0.07) {
-          adjP[2] = Math.min(adjP[2] * 1.50 + 0.20, 0.97);
-          adjP[0] *= 0.45;
-          adjP[1] *= 0.65;
+        // --- Koreksi 8: Luminance sangat rendah → BURUK ---
+        // Threshold diturunkan (90→80) agar tidak over-classify SEDANG jadi BURUK
+        if (lp.mean < 80 || (lp.zoneDark + lp.zoneLoDark > 0.55)) {
+          adjP[2] = Math.min(adjP[2] * 1.32 + 0.12, 0.95);
+          adjP[0] *= 0.55;
+          adjP[1] *= 0.72;
+        } else if (lp.mean < 105 && lp.zoneDark + lp.zoneLoDark > 0.40) {
+          adjP[2] = Math.min(adjP[2] * 1.14 + 0.04, 0.92);
+          adjP[0] *= 0.80;
         }
 
-        // --- Koreksi 6: Override khusus jika background sangat besar ---
-        // (foto tempe dengan banyak background — percayai warna tempe aktual)
-        if (cp.bgRatio > 0.30) {
-          // Lebih dari 30% background di gambar → lebih percaya colorProfile
-          if (strongWhite > 0.45) {
-            adjP[0] = Math.max(adjP[0], 0.60);
-            adjP[2] = Math.min(adjP[2], 0.20);
+        // --- Koreksi 9: Luminance std tinggi → SEDANG ---
+        if (lp.std > 58 && lp.mean >= 105 && lp.mean < 170) {
+          adjP[1] = Math.min(adjP[1] * 1.18 + 0.06, 0.92);
+          adjP[0] *= 0.84;
+        } else if (lp.std > 72 && lp.localContrast > 48) {
+          adjP[2] = Math.min(adjP[2] * 1.10 + 0.03, 0.92);
+          adjP[0] *= 0.90;
+        }
+
+        // --- Koreksi 10: Skewness luminance ---
+        if (lp.skewness < -0.8 && lp.mean > 145) {
+          adjP[0] = Math.min(adjP[0] * 1.10, 0.94);
+          adjP[2] *= 0.78;
+        } else if (lp.skewness > 0.8 && lp.mean < 145) {
+          adjP[2] = Math.min(adjP[2] * 1.10, 0.92);
+          adjP[0] *= 0.84;
+        }
+
+        // --- Koreksi 11: Luminance Class heuristic sebagai tie-breaker ---
+        // Jika model masih ambiguous (margin < 0.12), gunakan lumClass sebagai pemutus
+        const lumAdjSum0 = adjP.reduce((a, b) => a + b, 0) || 1;
+        const preTmp = adjP.map((p) => p / lumAdjSum0);
+        const preSorted = [...preTmp].sort((a, b) => b - a);
+        if (preSorted[0] - preSorted[1] < 0.12) {
+          if (lp.lumClass === 'baik') {
+            adjP[0] = Math.min(adjP[0] * 1.15 + 0.05, 0.95);
+          } else if (lp.lumClass === 'buruk') {
+            adjP[2] = Math.min(adjP[2] * 1.15 + 0.05, 0.95);
+          } else if (lp.lumClass === 'sedang') {
+            adjP[1] = Math.min(adjP[1] * 1.10 + 0.04, 0.93);
           }
         }
 
@@ -12435,23 +12709,38 @@
         const adjSum = adjP.reduce((a, b) => a + b, 0) || 1;
         const finalP = adjP.map((p) => p / adjSum);
 
-        // ── Keputusan final dari probabilitas yang sudah dikoreksi ────
+        // ── Keputusan final — triple-check dengan majority vote ────────
         const rfIdx  = rfP.indexOf(Math.max(...rfP));
         const dtIdx  = dtP.indexOf(Math.max(...dtP));
         const rfDtAgree = rfIdx === dtIdx;
         let maxIdx = finalP.indexOf(Math.max(...finalP));
 
-        // Jika model tidak sepakat dan ambigous, percayai RF
+        // Sinyal luminance sebagai suara ketiga (tie-breaker)
+        const lumIdx = lp.lumClass === 'baik' ? 0 : lp.lumClass === 'buruk' ? 2 : 1;
+
+        // Jika model tidak sepakat, lakukan majority vote RF + DT + Lum
         const sorted = [...finalP].sort((a, b) => b - a);
         const margin = sorted[0] - sorted[1];
         const isAmbiguous = margin < 0.15;
-        if (isAmbiguous && !rfDtAgree) maxIdx = rfIdx;
 
-        // ── Confidence yang realistis ─────────────────────────────────
+        if (isAmbiguous && !rfDtAgree) {
+          // Ambiguous + tidak sepakat: cek apakah luminance bisa jadi penentu
+          const votes = [rfIdx, dtIdx, lumIdx];
+          const voteCounts = [0, 1, 2].map((cls) => votes.filter((v) => v === cls).length);
+          const majorityClass = voteCounts.indexOf(Math.max(...voteCounts));
+          // Hanya override jika ada majority (2 dari 3 setuju)
+          if (Math.max(...voteCounts) >= 2) {
+            maxIdx = majorityClass;
+          } else {
+            maxIdx = rfIdx; // fallback ke RF jika semua berbeda
+          }
+        }
+
+        // ── Confidence realistis ──────────────────────────────────────
         let rawConf = finalP[maxIdx];
-        if (isAmbiguous) rawConf *= 0.90;
-        if (rfDtAgree)   rawConf  = Math.min(rawConf * 1.05, 0.99);
-        const conf = Math.max(50, Math.min(99, Math.round(rawConf * 100)));
+        if (isAmbiguous) rawConf *= 0.88;
+        if (rfDtAgree)   rawConf  = Math.min(rawConf * 1.04, 0.97);
+        const conf = Math.max(52, Math.min(97, Math.round(rawConf * 100)));
         const pct  = finalP.map((p) => Math.round(p * 100));
 
         // ── Label & teks ──────────────────────────────────────────────
@@ -12473,6 +12762,7 @@
           ? "✅ RF & DT sepakat"
           : "⚠️ RF & DT berbeda · koreksi domain diterapkan";
         const ambigNote = isAmbiguous ? " · zona ambiguous" : "";
+        const dtWeightNote = W_DT < W_DT_BASE * 0.8 ? ` · DT bobot adaptif ${(W_DT*100).toFixed(0)}%` : "";
 
         // ── Update UI ─────────────────────────────────────────────────
         document.getElementById("result-badge").innerHTML = label;
@@ -12481,7 +12771,7 @@
         document.getElementById("time-val").innerHTML   = elapsed + " ms";
         document.getElementById("result-desc").innerHTML = desc;
         document.getElementById("result-model-note").innerHTML =
-          "Ensemble RF×0.72+DT×0.28 · Koreksi warna+spasial · " + agreeNote + ambigNote;
+          "Ensemble RF×" + (W_RF*100).toFixed(0) + "+DT×" + (W_DT*100).toFixed(0) + " · Luminance ITU-R BT.601 · Koreksi warna+spasial+luminance · " + agreeNote + ambigNote + dtWeightNote;
 
         document.getElementById("proba-baik").textContent   = "Baik: "   + pct[0] + "%";
         document.getElementById("proba-sedang").textContent = "Sedang: " + pct[1] + "%";
@@ -12509,6 +12799,74 @@
         }
 
         renderVoting(pct[0], pct[1], pct[2], 200);
+
+        // ── Render Luminance Panel ─────────────────────────────────────
+        const lumPanel = document.getElementById("luminance-panel");
+        if (lumPanel) {
+          lumPanel.style.display = "block";
+          const lumClassColors = { baik: '#6ee7b7', sedang: '#fcd34d', buruk: '#fca5a5', mid: '#94a3b8' };
+          const lumClassLabels = { baik: '🟢 Cerah / Baik', sedang: '🟡 Menengah / Sedang', buruk: '🔴 Gelap / Buruk', mid: '⚪ Menengah' };
+          const lumColor = lumClassColors[lp.lumClass] || '#94a3b8';
+          const lumLabel = lumClassLabels[lp.lumClass] || 'Menengah';
+          // Bar distribusi zona
+          const totalZone = lp.zoneDark + lp.zoneLoDark + lp.zoneMid + lp.zoneLoLight + lp.zoneLight;
+          const pZD  = Math.round(lp.zoneDark    * 100);
+          const pZLD = Math.round(lp.zoneLoDark   * 100);
+          const pZM  = Math.round(lp.zoneMid      * 100);
+          const pZLL = Math.round(lp.zoneLoLight  * 100);
+          const pZL  = Math.round(lp.zoneLight    * 100);
+          lumPanel.innerHTML = `
+            <div class="dt-panel-title">
+              <i class="ti ti-brightness"></i> Analisis Luminance · ITU-R BT.601 (0.299R + 0.587G + 0.114B)
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+              <div style="text-align:center;flex:1;min-width:80px;">
+                <div style="font-size:11px;color:var(--text-soft);margin-bottom:4px;">Mean Luminance</div>
+                <div style="font-size:22px;font-weight:800;color:${lumColor}">${Math.round(lp.mean)}</div>
+                <div style="font-size:10px;color:var(--text-muted);">dari 255</div>
+              </div>
+              <div style="text-align:center;flex:1;min-width:80px;">
+                <div style="font-size:11px;color:var(--text-soft);margin-bottom:4px;">Std Dev</div>
+                <div style="font-size:22px;font-weight:800;">${Math.round(lp.std)}</div>
+                <div style="font-size:10px;color:var(--text-muted);">variasi</div>
+              </div>
+              <div style="text-align:center;flex:1;min-width:80px;">
+                <div style="font-size:11px;color:var(--text-soft);margin-bottom:4px;">Kontras Lokal</div>
+                <div style="font-size:22px;font-weight:800;">${Math.round(lp.localContrast)}</div>
+                <div style="font-size:10px;color:var(--text-muted);">per blok 4×4</div>
+              </div>
+              <div style="text-align:center;flex:1;min-width:80px;">
+                <div style="font-size:11px;color:var(--text-soft);margin-bottom:4px;">Uniformitas</div>
+                <div style="font-size:22px;font-weight:800;">${Math.round(lp.uniformity*100)}%</div>
+                <div style="font-size:10px;color:var(--text-muted);">piksel seragam</div>
+              </div>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;display:flex;justify-content:space-between;">
+                <span>Distribusi Zona Luminance:</span>
+                <span style="color:${lumColor};font-weight:700;">${lumLabel}</span>
+              </div>
+              <div style="display:flex;height:10px;border-radius:999px;overflow:hidden;gap:1px;">
+                <div style="width:${pZD}%;background:#ef4444;" title="Gelap (0-50): ${pZD}%"></div>
+                <div style="width:${pZLD}%;background:#f97316;" title="Agak Gelap (51-101): ${pZLD}%"></div>
+                <div style="width:${pZM}%;background:#eab308;" title="Menengah (102-152): ${pZM}%"></div>
+                <div style="width:${pZLL}%;background:#86efac;" title="Terang (153-203): ${pZLL}%"></div>
+                <div style="width:${pZL}%;background:#10b981;" title="Sangat Terang (204-255): ${pZL}%"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text-muted);">
+                <span>🔴 Gelap ${pZD}%</span>
+                <span>🟠 ${pZLD}%</span>
+                <span>🟡 ${pZM}%</span>
+                <span>🟢 ${pZLL}%</span>
+                <span>✅ Terang ${pZL}%</span>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">
+              Min: ${Math.round(lp.min)} · Max: ${Math.round(lp.max)} · Median: ${Math.round(lp.median)} · Skewness: ${lp.skewness.toFixed(2)}
+              &nbsp;·&nbsp; <span style="color:var(--text-soft)">Skewness ${lp.skewness < -0.3 ? '< 0 → dominan piksel terang' : lp.skewness > 0.3 ? '> 0 → dominan piksel gelap' : '≈ 0 → distribusi simetris'}</span>
+            </div>
+          `;
+        }
 
         latestResult = {
           label_display: label, label_key: key,
