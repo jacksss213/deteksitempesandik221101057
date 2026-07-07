@@ -5139,7 +5139,7 @@
                 39, -2, -2, 18, -2, 11, 36, -2, -2, 99, -2, -2, -2, -2, -2,
               ],
               th: [
-                2516.0, 2146.5, 4.5, -2.0, 559.5, -2.0, -2.0, 4323.0, -2.0,
+                2516.0, 2106.5, 4.5, -2.0, 559.5, -2.0, -2.0, 4323.0, -2.0,
                 -2.0, 0.925041, -2.0, 0.34557, 0.950619, 51.367691, 40.712229,
                 39.5, -2.0, -2.0, 77.5, -2.0, 24.686258, 1850.5, -2.0, -2.0,
                 0.023895, -2.0, -2.0, -2.0, -2.0, -2.0,
@@ -5242,7 +5242,7 @@
               th: [
                 42.844666, 0.023621, 2925.0, 97.179474, -2.0, -2.0, 0.021973,
                 0.950034, 1.0, -2.0, -2.0, -2.0, -2.0, -2.0, 0.117572,
-                11.576053, 0.146913, 0.858365, -2.0, 125.604523, -2.0, -2.0,
+                11.576053, 0.106913, 0.858365, -2.0, 125.604523, -2.0, -2.0,
                 -2.0, 175.168304, -2.0, 0.015015, -2.0, -2.0, 6.5, -2.0, -2.0,
               ],
               v: [
@@ -6890,7 +6890,7 @@
                 76, 20, 22, -2, -2, -2, 97, -2, 7, -2, -2,
               ],
               th: [
-                0.046173, 0.031433, 146.5, 0.097466, -2.0, -2.0, 2269.5, 0.5,
+                0.046173, 0.031433, 106.5, 0.097466, -2.0, -2.0, 2269.5, 0.5,
                 213.406349, -2.0, -2.0, -2.0, -2.0, 17.5, -2.0, -2.0, 3.841443,
                 6154.5, 4315.5, -2.0, -2.0, -2.0, 0.014984, -2.0, 42.7995, -2.0,
                 -2.0,
@@ -7681,7 +7681,7 @@
                 -2, 46, -2, -2, 33, -2, 95, -2, -2,
               ],
               th: [
-                1579.0, 2146.5, 1893.5, 3.0, -2.0, 52.0, -2.0, 0.252533, -2.0,
+                1579.0, 2106.5, 1893.5, 3.0, -2.0, 52.0, -2.0, 0.252533, -2.0,
                 125.521698, 1524.0, -2.0, -2.0, -2.0, -2.0, 0.015442, -2.0, 2.0,
                 -2.0, -2.0, 451.5, -2.0, 0.019409, -2.0, -2.0,
               ],
@@ -7779,7 +7779,7 @@
               ],
               th: [
                 329.5, 120.0, 26.459039, 0.37817, 0.023956, -2.0, -2.0, -2.0,
-                0.146741, 11.365342, 0.845851, -2.0, -2.0, -2.0, 0.026154,
+                0.106741, 11.365342, 0.845851, -2.0, -2.0, -2.0, 0.026154,
                 77.609161, -2.0, 1.0, -2.0, -2.0, -2.0, -2.0, 0.024658,
                 0.025848, -2.0, -2.0, 2986.5, -2.0, -2.0,
               ],
@@ -8063,7 +8063,7 @@
                 31, -2, -2, 27, -2, -2, 94, -2, 75, -2, -2,
               ],
               th: [
-                146.274193, 3539.0, 0.036835, 242.0, -2.0, -2.0, 7.255347,
+                106.274193, 3539.0, 0.036835, 242.0, -2.0, -2.0, 7.255347,
                 0.939097, 18.679872, -2.0, -2.0, -2.0, -2.0, -2.0, 213.0,
                 56.915663, 21.0, -2.0, -2.0, 196.5, -2.0, -2.0, 0.014252, -2.0,
                 0.09287, -2.0, -2.0,
@@ -12513,12 +12513,12 @@
           if (e) e.textContent = v;
         };
         setEl("info-trees", "200 pohon");
-        setEl("info-feats", "146");
+        setEl("info-feats", "106");
         setEl("tree-count-val", "200");
-        setEl("feat-count-val", "146");
+        setEl("feat-count-val", "106");
         setEl("tree-viz-title", "200");
         setEl("hasil-tab-trees", "200");
-        setEl("hasil-tab-feat", "146");
+        setEl("hasil-tab-feat", "106");
       }
 
       // ── runAnalysis: entry point ──────────────────────────────────
@@ -13200,12 +13200,50 @@
         reader.onload = (ev) => {
           const img = new Image();
           img.onload = function () {
-            currentImage = { element: img, isFile: true, file };
-            drawToCanvas(img);
-            document.getElementById("img-info").innerHTML =
-              img.width + " × " + img.height + " px · Analisis ML aktif";
-            pendingDriveBlob = file;
-            showPreviewCard();
+            // ─── Auto-resize ke 128×128 piksel ───────────────
+            // Semua foto/gambar yang diupload (klik pilih file, drag & drop,
+            // maupun dari mobile) otomatis diresize ke 128x128 sebelum
+            // ditampilkan & dianalisis, agar konsisten di semua perangkat.
+            const RESIZE = 128;
+            const resizeCanvas = document.createElement("canvas");
+            resizeCanvas.width = RESIZE;
+            resizeCanvas.height = RESIZE;
+            const rctx = resizeCanvas.getContext("2d");
+            rctx.imageSmoothingEnabled = true;
+            rctx.imageSmoothingQuality = "high";
+            rctx.drawImage(img, 0, 0, RESIZE, RESIZE);
+
+            const resizedImg = new Image();
+            resizedImg.onload = function () {
+              currentImage = {
+                element: resizedImg,
+                isFile: true,
+                file,
+                originalWidth: img.width,
+                originalHeight: img.height,
+              };
+              drawToCanvas(resizedImg);
+              document.getElementById("img-info").innerHTML =
+                RESIZE +
+                " × " +
+                RESIZE +
+                " px (auto-resize dari " +
+                img.width +
+                "×" +
+                img.height +
+                ") · Analisis ML aktif";
+              showPreviewCard();
+            };
+            resizedImg.src = resizeCanvas.toDataURL("image/jpeg", 0.92);
+
+            // Blob hasil resize 128x128 yang dikirim ke Drive (mengganti file asli)
+            resizeCanvas.toBlob(
+              (blob) => {
+                pendingDriveBlob = blob || file;
+              },
+              "image/jpeg",
+              0.92
+            );
           };
           img.src = ev.target.result;
         };
